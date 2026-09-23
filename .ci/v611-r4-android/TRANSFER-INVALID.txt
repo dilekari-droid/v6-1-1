@@ -1,0 +1,1 @@
+part00 transfer integrity mismatch detected; do not build from this directory until manifest validation passes.
