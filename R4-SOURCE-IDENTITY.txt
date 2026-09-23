@@ -1,0 +1,5 @@
+V6.1.1 R4 verified source package
+SHA256=a1b592f0d15e7412a396dd2b739a86239f66c773b23426ead5b7263cdf7c1fe0
+size=747007
+backend_tests=113/113 PASS
+apk_produced=false
