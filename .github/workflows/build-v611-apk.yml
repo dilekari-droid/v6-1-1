@@ -1,19 +1,13 @@
-name: V6.1.1 Source Verify and Manual APK Build
+name: V6.1.1 R4 Verify and APK Build
 
 on:
   push:
     branches: [ main ]
     paths:
-      - '.ci/v611-source/**'
+      - '.ci/v611-r4-android-xz/**'
       - '.github/workflows/build-v611-apk.yml'
-      - 'PREAPK-R4-SYNC-PLAN.md'
+      - 'R4-SOURCE-IDENTITY.txt'
   workflow_dispatch:
-    inputs:
-      confirm_build:
-        description: 'Explicitly allow debug APK generation'
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -26,27 +20,35 @@ jobs:
       - name: Checkout V6.1.1 repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct and verify V6.1.1 Android source
+      - name: Reconstruct and verify V6.1.1 R4 Android source
         shell: bash
         run: |
           set -euo pipefail
-          test -d .ci/v611-source
-          mapfile -t parts < <(find .ci/v611-source -maxdepth 1 -type f -name 'part*.b64' | sort -V)
-          test "${#parts[@]}" -gt 0
-          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/v611-source.tar.xz
-          xz --test /tmp/v611-source.tar.xz
+          SRC_PARTS=.ci/v611-r4-android-xz
+          test -d "$SRC_PARTS"
+          test ! -f .ci/v611-r4-android/TRANSFER-INVALID.txt || echo 'Ignoring explicitly invalid legacy R4 transfer.'
+          mapfile -t parts < <(find "$SRC_PARTS" -maxdepth 1 -type f -name 'part*.b64' | sort -V)
+          test "${#parts[@]}" -eq 4
+          for p in "${parts[@]}"; do test -s "$p"; done
+          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/v611-r4-android.tar.xz
+          xz --test /tmp/v611-r4-android.tar.xz
           mkdir -p /tmp/v611-src
-          tar -xJf /tmp/v611-source.tar.xz -C /tmp/v611-src
+          tar -xJf /tmp/v611-r4-android.tar.xz -C /tmp/v611-src
           ANDROID_DIR="$(find /tmp/v611-src -type f -name settings.gradle.kts -printf '%h\n' | head -1)"
           test -n "$ANDROID_DIR"
           test -f "$ANDROID_DIR/app/build.gradle.kts"
           grep -q 'applicationId = "tr.borsatakip.v5"' "$ANDROID_DIR/app/build.gradle.kts"
           grep -q 'versionCode = 556' "$ANDROID_DIR/app/build.gradle.kts"
           grep -q 'versionName = "5.4.16"' "$ANDROID_DIR/app/build.gradle.kts"
-          echo 'V6.1.1 source reconstruction/identity PASS; no APK generated.'
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+          sha256sum /tmp/v611-r4-android.tar.xz
+          echo 'V6.1.1 R4 Android source reconstruction/identity PASS.'
+
+      - name: Upload verified Android source payload digest
+        shell: bash
+        run: sha256sum /tmp/v611-r4-android.tar.xz
 
   build-apk:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_build }}
     needs: source-verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -54,16 +56,16 @@ jobs:
       - name: Checkout V6.1.1 repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct V6.1.1 Android source
+      - name: Reconstruct V6.1.1 R4 Android source
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t parts < <(find .ci/v611-source -maxdepth 1 -type f -name 'part*.b64' | sort -V)
-          test "${#parts[@]}" -gt 0
-          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/v611-source.tar.xz
-          xz --test /tmp/v611-source.tar.xz
+          mapfile -t parts < <(find .ci/v611-r4-android-xz -maxdepth 1 -type f -name 'part*.b64' | sort -V)
+          test "${#parts[@]}" -eq 4
+          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/v611-r4-android.tar.xz
+          xz --test /tmp/v611-r4-android.tar.xz
           mkdir -p /tmp/v611-src
-          tar -xJf /tmp/v611-source.tar.xz -C /tmp/v611-src
+          tar -xJf /tmp/v611-r4-android.tar.xz -C /tmp/v611-src
           ANDROID_DIR="$(find /tmp/v611-src -type f -name settings.gradle.kts -printf '%h\n' | head -1)"
           test -n "$ANDROID_DIR"
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
@@ -79,6 +81,11 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Run Android unit tests
+        shell: bash
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
+
       - name: Build debug APK
         shell: bash
         working-directory: ${{ env.ANDROID_DIR }}
@@ -91,17 +98,17 @@ jobs:
           APK="$(find "$ANDROID_DIR/app/build/outputs/apk/debug" -type f -name '*.apk' | head -1)"
           test -n "$APK"
           mkdir -p out
-          cp "$APK" out/V6.1.1-debug.apk
-          sha256sum "$APK" | tee out/V6.1.1-debug.apk.sha256
+          cp "$APK" out/V6.1.1-R4-debug.apk
+          sha256sum "$APK" | tee out/V6.1.1-R4-debug.apk.sha256
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          "$BUILD_TOOLS/aapt" dump badging "$APK" | tee out/V6.1.1-badging.txt
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee out/V6.1.1-signature.txt
-          grep -q "package: name='tr.borsatakip.v5' versionCode='556' versionName='5.4.16'" out/V6.1.1-badging.txt
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | tee out/V6.1.1-R4-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee out/V6.1.1-R4-signature.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='556' versionName='5.4.16'" out/V6.1.1-R4-badging.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: V6.1.1-APK
+          name: V6.1.1-R4-APK
           path: out/*
           if-no-files-found: error
           retention-days: 30
