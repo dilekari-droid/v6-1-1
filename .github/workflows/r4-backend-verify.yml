@@ -1,0 +1,59 @@
+name: V6.1.1 R4 Backend Verify
+
+on:
+  push:
+    branches: [ r4-sync-stage ]
+    paths:
+      - '.ci/v611-backend-r4/**'
+      - '.github/workflows/r4-backend-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-r4-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Reconstruct and hash-verify R4 backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t parts < <(find .ci/v611-backend-r4 -maxdepth 1 -type f -name 'part*.b64' | sort -V)
+          test "${#parts[@]}" -eq 10
+          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/backend.tar.xz
+          echo 'a8272efc8853e500d3a83578fa6658da1a10157ae865eca7a6342c82eae98e61  /tmp/backend.tar.xz' | sha256sum -c -
+          xz --test /tmp/backend.tar.xz
+          mkdir -p /tmp/v611-r4
+          tar -xJf /tmp/backend.tar.xz -C /tmp/v611-r4
+          test -f /tmp/v611-r4/backend/main.py
+          test -f /tmp/v611-r4/backend/requirements-dev.txt
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: /tmp/v611-r4/backend/requirements-dev.txt
+
+      - name: Install test dependencies
+        shell: bash
+        run: python -m pip install --disable-pip-version-check -r /tmp/v611-r4/backend/requirements-dev.txt
+
+      - name: Run backend/source test suite
+        shell: bash
+        working-directory: /tmp/v611-r4/backend
+        env:
+          PYTHONPATH: /tmp/v611-r4/backend
+        run: python -m pytest -q
+
+      - name: Verify source readiness fail-closed policy
+        shell: bash
+        working-directory: /tmp/v611-r4/backend
+        env:
+          PYTHONPATH: /tmp/v611-r4/backend
+        run: python preapk_readiness.py
