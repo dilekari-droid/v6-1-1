@@ -1,0 +1,256 @@
+--- a/app/src/main/java/tr/borsatakip/v5/data/ExternalMarketQuoteService.kt
++++ b/app/src/main/java/tr/borsatakip/v5/data/ExternalMarketQuoteService.kt
+@@ -0,0 +1,253 @@
++package tr.borsatakip.v5.data
++
++import android.content.Context
++import android.os.SystemClock
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import tr.borsatakip.v5.model.Stock
++import java.util.concurrent.ConcurrentHashMap
++
++/**
++ * Display-only external market quote chain.
++ *
++ * Priority is explicit and fail-closed:
++ * verified production capability -> user-enabled delayed Yahoo fallback -> last successful display cache.
++ * The current production backend intentionally exposes no verified single-quote route for FX/COMMODITY,
++ * therefore capability state is reported honestly and never converted into synthetic prices.
++ */
++class ExternalMarketQuoteService(context: Context) {
++    enum class StageState { READY, SUCCESS, FAILED, DISABLED, UNSUPPORTED, UNCONFIGURED, SKIPPED, EMPTY, CACHED }
++    enum class SourceKind { FALLBACK, CACHE, NONE }
++
++    data class Stage(
++        val state: StageState,
++        val code: String,
++        val message: String,
++        val provider: String? = null,
++        val durationMs: Long? = null
++    ) {
++        fun shortLabel(prefix: String): String = when (state) {
++            StageState.SUCCESS -> "$prefix: BAŞARILI"
++            StageState.CACHED -> "$prefix: SON BAŞARILI VERİ"
++            StageState.DISABLED -> "$prefix: KAPALI"
++            StageState.UNSUPPORTED -> "$prefix: DESTEKLENMİYOR"
++            StageState.UNCONFIGURED -> "$prefix: YAPILANDIRILMAMIŞ"
++            StageState.FAILED -> "$prefix: BAŞARISIZ"
++            StageState.EMPTY -> "$prefix: VERİ YOK"
++            StageState.READY -> "$prefix: HAZIR"
++            StageState.SKIPPED -> "$prefix: ATLANDI"
++        }
++    }
++
++    data class Result(
++        val symbol: String,
++        val stock: Stock?,
++        val sourceKind: SourceKind,
++        val primary: Stage,
++        val fallback: Stage,
++        val cache: Stage,
++        val attemptedAt: Long,
++        val fromMemoryMemo: Boolean = false
++    ) {
++        val hasData: Boolean get() = stock != null
++        val isCached: Boolean get() = sourceKind == SourceKind.CACHE
++        val isFallback: Boolean get() = sourceKind == SourceKind.FALLBACK
++    }
++
++    private data class Memo(val elapsedAt: Long, val result: Result)
++
++    private val appContext = context.applicationContext
++    private val settings = SettingsStore(appContext)
++    private val cache = MarketDataCache(appContext)
++    private val fallback = YahooFallbackProvider(appContext)
++    private val capability = MarketCapabilityClient(appContext)
++    private val log = ExternalMarketQuoteLog(appContext)
++
++    suspend fun load(symbolLabel: String, providerTickers: List<String>, forceRefresh: Boolean = false): Result {
++        val symbol = symbolLabel.trim().uppercase()
++        val configFingerprint = listOf(
++            settings.baseUrl.trim().trimEnd('/'),
++            settings.apiKey.isNotBlank().toString(),
++            settings.experimentalProvidersEnabled.toString(),
++            settings.yahooFallbackEnabled.toString()
++        ).joinToString("|")
++        val key = "$symbol|${providerTickers.joinToString(",") { it.trim() }}|$configFingerprint"
++        val nowElapsed = SystemClock.elapsedRealtime()
++        if (!forceRefresh) {
++            memo[key]?.takeIf { nowElapsed - it.elapsedAt <= MEMO_TTL_MS }?.let {
++                return it.result.copy(fromMemoryMemo = true)
++            }
++        }
++        val lock = locks.getOrPut(key) { Mutex() }
++        return lock.withLock {
++            val insideNow = SystemClock.elapsedRealtime()
++            if (!forceRefresh) {
++                memo[key]?.takeIf { insideNow - it.elapsedAt <= MEMO_TTL_MS }?.let {
++                    return@withLock it.result.copy(fromMemoryMemo = true)
++                }
++            }
++            val result = loadFresh(symbol, providerTickers, forceRefresh)
++            memo[key] = Memo(SystemClock.elapsedRealtime(), result)
++            result
++        }
++    }
++
++    private suspend fun loadFresh(symbol: String, providerTickers: List<String>, forceRefresh: Boolean): Result {
++        val attemptedAt = System.currentTimeMillis()
++        val primaryStage = evaluatePrimary(symbol, forceRefresh)
++        val fallbackAllowed = ExternalMarketQuotePolicy.fallbackAllowed(
++            settings.experimentalProvidersEnabled,
++            settings.yahooFallbackEnabled
++        )
++
++        var fallbackStage = if (fallbackAllowed) {
++            Stage(StageState.SKIPPED, "FALLBACK_PENDING", "Yedek sağlayıcı henüz denenmedi.", provider = fallback.displayName)
++        } else {
++            Stage(StageState.DISABLED, "FALLBACK_DISABLED", "Yedek sağlayıcı kullanıcı ayarlarında kapalı.", provider = fallback.displayName)
++        }
++
++        var fallbackStock: Stock? = null
++        if (fallbackAllowed) {
++            log.append(
++                symbol, fallback.displayName, "FALLBACK_TRANSITION", "START",
++                errorCode = primaryStage.code,
++                detail = "primary=${primaryStage.state};tickers=${providerTickers.joinToString(",")}"
++            )
++            log.append(symbol, fallback.displayName, "REQUEST", "START", detail = "tickers=${providerTickers.joinToString(",")}")
++            val started = SystemClock.elapsedRealtime()
++            val result = runCatching { fallback.fetchExternalQuote(symbol, providerTickers) }
++            val duration = SystemClock.elapsedRealtime() - started
++            val displayResult = result.getOrNull()
++            val stock = displayResult?.stock?.takeIf(::validStock)
++            if (stock != null) {
++                fallbackStock = stock
++                cache.save(stock)
++                fallbackStage = Stage(
++                    StageState.SUCCESS,
++                    "FALLBACK_OK",
++                    "Yahoo gecikmeli yedeği geçerli fiyat ve zaman damgası döndürdü.",
++                    provider = fallback.displayName,
++                    durationMs = duration
++                )
++                log.append(
++                    symbol, fallback.displayName, "FALLBACK", "SUCCESS", duration,
++                    detail = "ticker=${displayResult?.providerTicker ?: "—"};http=${displayResult?.httpStatus ?: 0};attempts=${displayResult?.attempts ?: 0};parseCount=1;marketTimestamp=${stock.dataTimestamp}"
++                )
++            } else {
++                val error = displayResult?.error ?: result.exceptionOrNull()?.message ?: "Yedek sağlayıcı veri döndürmedi."
++                val code = ExternalMarketQuotePolicy.classifyProviderError(error)
++                fallbackStage = Stage(StageState.FAILED, code, error, provider = fallback.displayName, durationMs = duration)
++                log.append(
++                    symbol, fallback.displayName, "FALLBACK", "FAILED", duration, code,
++                    "ticker=${displayResult?.providerTicker ?: "—"};http=${displayResult?.httpStatus ?: 0};attempts=${displayResult?.attempts ?: 0};$error"
++                )
++            }
++        } else {
++            log.append(symbol, fallback.displayName, "FALLBACK", "DISABLED", errorCode = "FALLBACK_DISABLED")
++        }
++
++        val cached = if (fallbackStock == null) cache.load(symbol)?.takeIf(::validStock) else null
++        val cacheStage = when {
++            fallbackStock != null -> Stage(StageState.SKIPPED, "CACHE_NOT_NEEDED", "Yedek sağlayıcı veri üretti; cache kullanılmadı.")
++            cached != null -> Stage(StageState.CACHED, "CACHE_USED", "Son başarılı veri yalnız görüntüleme için kullanılıyor.", provider = cached.source)
++            else -> Stage(StageState.EMPTY, "CACHE_EMPTY", "Son başarılı veri önbelleği bulunamadı.")
++        }
++        if (cached != null) {
++            log.append(symbol, cached.source, "CACHE", "USED", errorCode = "CACHE_USED", detail = "marketTimestamp=${cached.dataTimestamp}")
++        }
++
++        val choice = ExternalMarketQuotePolicy.chooseSource(fallbackStock != null, cached != null)
++        val stock = when (choice) {
++            ExternalMarketQuotePolicy.SourceChoice.FALLBACK -> fallbackStock
++            ExternalMarketQuotePolicy.SourceChoice.CACHE -> cached
++            ExternalMarketQuotePolicy.SourceChoice.NONE -> null
++        }
++        return Result(
++            symbol = symbol,
++            stock = stock,
++            sourceKind = when (choice) {
++                ExternalMarketQuotePolicy.SourceChoice.FALLBACK -> SourceKind.FALLBACK
++                ExternalMarketQuotePolicy.SourceChoice.CACHE -> SourceKind.CACHE
++                ExternalMarketQuotePolicy.SourceChoice.NONE -> SourceKind.NONE
++            },
++            primary = primaryStage,
++            fallback = fallbackStage,
++            cache = cacheStage,
++            attemptedAt = attemptedAt
++        )
++    }
++
++    private suspend fun evaluatePrimary(symbol: String, forceRefresh: Boolean): Stage {
++        val market = ExternalMarketQuotePolicy.capabilityMarket(symbol)
++            ?: return Stage(StageState.UNSUPPORTED, "PRIMARY_MARKET_UNKNOWN", "Bu sembol için production capability eşlemesi yok.")
++        if (!ProviderReadinessService.isValidHttps(settings.baseUrl) || settings.apiKey.isBlank()) {
++            val stage = Stage(StageState.UNCONFIGURED, "PRIMARY_UNCONFIGURED", "Production backend URL/API anahtarı yapılandırılmamış.")
++            log.append(symbol, "production_backend", "PRIMARY_CAPABILITY", "UNCONFIGURED", errorCode = stage.code, detail = stage.message)
++            return stage
++        }
++        val capabilityFingerprint = "${settings.baseUrl.trim().trimEnd('/')}|${settings.apiKey.hashCode()}"
++        val started = SystemClock.elapsedRealtime()
++        val loaded = loadCapability(forceRefresh, capabilityFingerprint)
++        val duration = SystemClock.elapsedRealtime() - started
++        val snapshot = loaded.getOrNull()
++        if (snapshot == null) {
++            val message = loaded.exceptionOrNull()?.message ?: "Production capability alınamadı."
++            val code = ExternalMarketQuotePolicy.classifyProviderError(message)
++            val stage = Stage(StageState.FAILED, code, message, provider = "production_backend", durationMs = duration)
++            log.append(symbol, "production_backend", "PRIMARY_CAPABILITY", "FAILED", duration, code, message)
++            return stage
++        }
++        val cap = snapshot.market(market)
++        if (cap == null || !cap.supported || !cap.marketData) {
++            val code = cap?.reasonCode ?: "PRIMARY_MARKET_UNSUPPORTED"
++            val message = cap?.message ?: "$market production market-data capability desteklenmiyor."
++            val stage = Stage(StageState.UNSUPPORTED, code, message, provider = cap?.provider ?: snapshot.primaryProvider, durationMs = duration)
++            log.append(symbol, stage.provider ?: "production_backend", "PRIMARY_CAPABILITY", "UNSUPPORTED", duration, code, message)
++            return stage
++        }
++        // Capability hazır olsa bile bu Android sürümünde doğrulanmış tekil FX/COMMODITY quote endpoint'i yoktur.
++        val stage = Stage(
++            StageState.FAILED,
++            "PRIMARY_QUOTE_ROUTE_UNAVAILABLE",
++            "$market capability mevcut; ancak doğrulanmış tekil dış-piyasa quote route'u bu istemcide tanımlı değil.",
++            provider = cap.provider ?: snapshot.primaryProvider,
++            durationMs = duration
++        )
++        log.append(symbol, stage.provider ?: "production_backend", "PRIMARY_QUOTE", "UNAVAILABLE", duration, stage.code, stage.message)
++        return stage
++    }
++
++    private suspend fun loadCapability(forceRefresh: Boolean, configFingerprint: String): kotlin.Result<MarketCapabilityClient.Snapshot> {
++        val now = SystemClock.elapsedRealtime()
++        if (!forceRefresh) {
++            capabilityMemo?.takeIf { it.configFingerprint == configFingerprint && now - it.elapsedAt <= CAPABILITY_MEMO_TTL_MS }?.let { return it.result }
++        }
++        return capabilityMutex.withLock {
++            val insideNow = SystemClock.elapsedRealtime()
++            if (!forceRefresh) {
++                capabilityMemo?.takeIf { it.configFingerprint == configFingerprint && insideNow - it.elapsedAt <= CAPABILITY_MEMO_TTL_MS }?.let { return@withLock it.result }
++            }
++            capability.load().also { capabilityMemo = CapabilityMemo(configFingerprint, SystemClock.elapsedRealtime(), it) }
++        }
++    }
++
++    private fun validStock(stock: Stock): Boolean {
++        val price = stock.quotePrice ?: stock.candles.lastOrNull()?.close
++        return price != null && price.isFinite() && price > 0.0 && stock.dataTimestamp > 0L
++    }
++
++    companion object {
++        private data class CapabilityMemo(
++            val configFingerprint: String,
++            val elapsedAt: Long,
++            val result: kotlin.Result<MarketCapabilityClient.Snapshot>
++        )
++
++        private const val MEMO_TTL_MS = 15_000L
++        private const val CAPABILITY_MEMO_TTL_MS = 15_000L
++        private val memo = ConcurrentHashMap<String, Memo>()
++        private val locks = ConcurrentHashMap<String, Mutex>()
++        private val capabilityMutex = Mutex()
++        @Volatile private var capabilityMemo: CapabilityMemo? = null
++    }
++}
