@@ -6,6 +6,7 @@ on:
     paths:
       - '.ci/v611-uiux-v6-fixes.py'
       - '.ci/v611-uiux-v6-copy-fixes.py'
+      - '.ci/v611-uiux-v6-favorites-failclosed.py'
       - '.ci/v611-overlay-r3/**'
       - '.github/workflows/build-v611-uiux-v6.yml'
   workflow_dispatch:
@@ -100,8 +101,14 @@ jobs:
           grep -Fq 'Veri doğrulanamadı • gerçek VİOP sinyali yayımlanmaz' "$SRC/ui/ViopActivity.kt"
           ! grep -Fq 'VİOP veri servisi hazır değil • ${local.failureCode}' "$SRC/ui/ViopActivity.kt"
 
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-favorites-failclosed.py" "$ANDROID_DIR"
+          grep -Fq '$symbol için güncel fiyat verisi yok' "$SRC/ui/FavoritesActivity.kt"
+          grep -Fq '$symbol için teknik analiz üretmeye yeterli gerçek veri yok' "$SRC/ui/FavoritesActivity.kt"
+          ! grep -Fq 'fallbackOpportunity(' "$SRC/ui/FavoritesActivity.kt"
+          ! grep -Fq '?: 0.0' "$SRC/ui/FavoritesActivity.kt"
+
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
-          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + UIUX-V6 fixes + professional user copy fixes' >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + UIUX-V6 fixes + professional user copy fixes + favorites fail-closed' >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
