@@ -80,11 +80,9 @@ jobs:
           ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
           SRC_ROOT="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
 
-          # R3 kept ResearchPolicies/NewsResearchAdapter but removed their model types.
           git -C "$GITHUB_WORKSPACE/base-v5" show HEAD:android/app/src/main/java/tr/borsatakip/v5/research/ResearchModels.kt \
             > "$SRC_ROOT/research/ResearchModels.kt"
 
-          # R3 BackendSessionClient depends on this new single-flight primitive.
           cat > "$SRC_ROOT/data/SessionRefreshGate.kt" <<'KOTLIN'
           package tr.borsatakip.v5.data
 
@@ -108,7 +106,6 @@ jobs:
           from pathlib import Path
 
           root = Path('base-v5/android/app/src/main/java/tr/borsatakip/v5')
-
           settings = root / 'data/SettingsStore.kt'
           lines = settings.read_text().splitlines()
           starts = [i for i, line in enumerate(lines) if line.strip() == 'companion object {']
@@ -141,6 +138,38 @@ jobs:
               path.write_text(body.replace(old, new, 1))
           PY
 
+          cat > "$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt" <<'KOTLIN'
+          package tr.borsatakip.v5.data
+
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class BackendUrlPolicyTest {
+              @Test fun acceptsCleanPublicHttpsOrigin() {
+                  assertTrue(BackendPreflightClient.validHttps("https://backend.example.com"))
+                  assertTrue(ProviderReadinessService.isValidHttps("https://backend.example.com"))
+              }
+
+              @Test fun rejectsUnsafeOrAmbiguousOrigins() {
+                  listOf(
+                      "http://backend.example.com",
+                      "https://localhost",
+                      "https://127.0.0.1",
+                      "https://[::1]",
+                      "https://10.0.2.2",
+                      "https://user:pass@backend.example.com",
+                      "https://backend.example.com?target=other",
+                      "https://backend.example.com#fragment"
+                  ).forEach {
+                      assertFalse(it, BackendPreflightClient.validHttps(it))
+                      assertFalse(it, ProviderReadinessService.isValidHttps(it))
+                  }
+              }
+          }
+          KOTLIN
+
+          test "$(git hash-object "$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt")" = '8d2aa5c7994ad1550f87a1726369e019433fd3b7'
           test "$(git hash-object "$SRC_ROOT/data/SessionRefreshGate.kt")" = '97aff01ee90011db6fcd82f27e4730060c2f2cc1'
           test "$(git hash-object "$SRC_ROOT/data/SettingsStore.kt")" = '199a3c8075e2d6d8a9ca543485ad822cade8c6f8'
           test "$(git hash-object "$SRC_ROOT/research/ResearchModels.kt")" = 'f8e1e965936659f7822bbc558ed9aab434bd6b4b'
