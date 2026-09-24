@@ -1,0 +1,216 @@
+--- a/app/src/main/java/tr/borsatakip/v5/data/YahooFallbackProvider.kt
++++ b/app/src/main/java/tr/borsatakip/v5/data/YahooFallbackProvider.kt
+@@ -53,7 +53,13 @@
+         }.awaitAll().filterNotNull()
+     }
+ 
+-    data class DisplayQuoteResult(val stock: Stock?, val error: String? = null)
++    data class DisplayQuoteResult(
++        val stock: Stock?,
++        val error: String? = null,
++        val providerTicker: String? = null,
++        val httpStatus: Int? = null,
++        val attempts: Int = 0
++    )
+ 
+     /**
+      * Takip/favori ekranı için yalnız son quote'u alır. Günlük 220 mum şartına bağlı değildir.
+@@ -63,20 +69,28 @@
+         val normalized = symbol.trim().uppercase()
+         if (!normalized.matches(SYMBOL_REGEX)) return@withContext DisplayQuoteResult(null, "Geçersiz sembol")
+         val attempt = fetchDelayedQuoteResult("$normalized.IS")
+-        val q = attempt.quote ?: return@withContext DisplayQuoteResult(null, attempt.error ?: "Yahoo quote alınamadı")
+-        DisplayQuoteResult(quoteOnlyStock(normalized, q), null)
++        val q = attempt.quote ?: return@withContext DisplayQuoteResult(null, attempt.error ?: "Yahoo quote alınamadı", "$normalized.IS", attempt.httpStatus, attempt.attempts)
++        DisplayQuoteResult(quoteOnlyStock(normalized, q), null, "$normalized.IS", attempt.httpStatus, attempt.attempts)
+     }
+ 
+     /** Piyasa özet kartları için Yahoo'nun ham ticker adlarını dener (ör. TRY=X). */
+     suspend fun fetchExternalQuote(symbolLabel: String, providerTickers: List<String>): DisplayQuoteResult = withContext(Dispatchers.IO) {
+         val errors = mutableListOf<String>()
++        var lastTicker: String? = null
++        var lastHttpStatus: Int? = null
++        var totalAttempts = 0
+         for (ticker in providerTickers.map { it.trim() }.filter { it.isNotBlank() }.distinct()) {
+             val attempt = fetchDelayedQuoteResult(ticker)
++            lastTicker = ticker
++            lastHttpStatus = attempt.httpStatus
++            totalAttempts += attempt.attempts
+             val q = attempt.quote
+-            if (q != null) return@withContext DisplayQuoteResult(quoteOnlyStock(symbolLabel.trim().uppercase(), q), null)
++            if (q != null) return@withContext DisplayQuoteResult(
++                quoteOnlyStock(symbolLabel.trim().uppercase(), q), null, ticker, attempt.httpStatus, totalAttempts
++            )
+             attempt.error?.let { errors += "$ticker: $it" }
+         }
+-        DisplayQuoteResult(null, errors.joinToString(" • ").ifBlank { "Yahoo quote alınamadı" })
++        DisplayQuoteResult(null, errors.joinToString(" • ").ifBlank { "Yahoo quote alınamadı" }, lastTicker, lastHttpStatus, totalAttempts)
+     }
+ 
+     /**
+@@ -248,7 +262,9 @@
+     private data class DelayedQuoteAttempt(
+         val quote: DelayedQuote?,
+         val error: String? = null,
+-        val retryable: Boolean = false
++        val retryable: Boolean = false,
++        val httpStatus: Int? = null,
++        val attempts: Int = 1
+     )
+ 
+     private fun quoteOnlyStock(symbol: String, q: DelayedQuote): Stock = Stock(
+@@ -278,7 +294,7 @@
+     private suspend fun fetchDelayedQuoteResult(providerTicker: String): DelayedQuoteAttempt {
+         var last = DelayedQuoteAttempt(null, "Yahoo quote alınamadı")
+         repeat(MAX_QUOTE_ATTEMPTS) { index ->
+-            last = fetchDelayedQuoteOnce(providerTicker)
++            last = fetchDelayedQuoteOnce(providerTicker).copy(attempts = index + 1)
+             if (last.quote != null || !last.retryable) return last
+             if (index < MAX_QUOTE_ATTEMPTS - 1) delay(QUOTE_RETRY_BASE_MS * (index + 1))
+         }
+@@ -296,39 +312,40 @@
+             con.setRequestProperty("User-Agent", "Mozilla/5.0 BorsaTakip/${BuildConfig.VERSION_NAME} Android")
+             val code = con.responseCode
+             if (code !in 200..299) {
+-                return DelayedQuoteAttempt(null, "Yahoo HTTP $code", retryable = code == 429 || code in 500..599)
++                return DelayedQuoteAttempt(null, "Yahoo HTTP $code", retryable = code == 429 || code in 500..599, httpStatus = code)
+             }
+             val body = con.inputStream.bufferedReader().use { it.readText() }
+             val r = JSONObject(body).optJSONObject("chart")?.optJSONArray("result")?.optJSONObject(0)
+-                ?: return DelayedQuoteAttempt(null, "Yahoo cevap yapısı geçersiz")
++                ?: return DelayedQuoteAttempt(null, "Yahoo cevap yapısı geçersiz", httpStatus = code)
+             val meta = r.optJSONObject("meta")
+             val timestamps = r.optJSONArray("timestamp")
+-                ?: return DelayedQuoteAttempt(null, "Yahoo timestamp yok")
++                ?: return DelayedQuoteAttempt(null, "Yahoo timestamp yok", httpStatus = code)
+             val quote = r.optJSONObject("indicators")?.optJSONArray("quote")?.optJSONObject(0)
+-                ?: return DelayedQuoteAttempt(null, "Yahoo quote dizisi yok")
++                ?: return DelayedQuoteAttempt(null, "Yahoo quote dizisi yok", httpStatus = code)
+             val closes = quote.optJSONArray("close")
+-                ?: return DelayedQuoteAttempt(null, "Yahoo kapanış dizisi yok")
++                ?: return DelayedQuoteAttempt(null, "Yahoo kapanış dizisi yok", httpStatus = code)
+             var lastIndex = -1
+             for (i in minOf(timestamps.length(), closes.length()) - 1 downTo 0) {
+                 if (!closes.isNull(i)) { lastIndex = i; break }
+             }
+-            if (lastIndex < 0) return DelayedQuoteAttempt(null, "Yahoo geçerli son fiyat yok")
++            if (lastIndex < 0) return DelayedQuoteAttempt(null, "Yahoo geçerli son fiyat yok", httpStatus = code)
+             val close = closes.optDouble(lastIndex, Double.NaN)
+             val metaPrice = meta?.optDouble("regularMarketPrice", Double.NaN)
+             val price = metaPrice?.takeIf { it.isFinite() && it > 0.0 }
+                 ?: close.takeIf { it.isFinite() && it > 0.0 }
+-                ?: return DelayedQuoteAttempt(null, "Yahoo fiyat geçersiz")
++                ?: return DelayedQuoteAttempt(null, "Yahoo fiyat geçersiz", httpStatus = code)
+             val previousClose = listOf(
+                 meta?.optDouble("chartPreviousClose", Double.NaN),
+                 meta?.optDouble("previousClose", Double.NaN)
+             ).firstOrNull { it != null && it.isFinite() && it > 0.0 }
+             val timestamp = timestamps.optLong(lastIndex, 0L) * 1000L
+-            if (timestamp <= 0L) return DelayedQuoteAttempt(null, "Yahoo veri zamanı geçersiz")
++            if (timestamp <= 0L) return DelayedQuoteAttempt(null, "Yahoo veri zamanı geçersiz", httpStatus = code)
+             val companyName = listOf(meta?.optString("longName"), meta?.optString("shortName"))
+                 .firstOrNull { !it.isNullOrBlank() }
+             DelayedQuoteAttempt(
+                 DelayedQuote(price, previousClose, timestamp, companyName, meta?.optString("currency")?.takeIf { it.isNotBlank() }),
+-                null
++                null,
++                httpStatus = code
+             )
+         } catch (e: Exception) {
+             DelayedQuoteAttempt(null, "Yahoo ${e.javaClass.simpleName}: ${e.message ?: "ağ hatası"}", retryable = true)
+--- a/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt
++++ b/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt
+@@ -21,7 +21,7 @@
+ import tr.borsatakip.v5.R
+ import tr.borsatakip.v5.data.BackendProvider
+ import tr.borsatakip.v5.data.BistIndexDataService
+-import tr.borsatakip.v5.data.ProviderRouter
++import tr.borsatakip.v5.data.ExternalMarketQuoteService
+ import tr.borsatakip.v5.data.MarketCapabilityClient
+ import tr.borsatakip.v5.data.RealtimeScannerClient
+ import tr.borsatakip.v5.data.SettingsStore
+@@ -202,7 +202,7 @@
+      * a validated result. Missing provider/data deliberately stays as an em dash.
+      */
+     private fun refreshMarketTiles() {
+-        val strict = ProviderRouter(this)
++        val external = ExternalMarketQuoteService(this)
+         val settings = SettingsStore(this)
+         lifecycleScope.launch {
+             coroutineScope {
+@@ -210,11 +210,11 @@
+                 val bist100Deferred = async { indexDeferred.await()["XU100"] }
+                 val bist30Deferred = async { indexDeferred.await()["XU030"] }
+                 val usdDeferred = async {
+-                    strict.fetchExternalQuote("USDTRY", listOf("TRY=X")).stock
++                    external.load("USDTRY", listOf("TRY=X"))
+                 }
+                 val goldDeferred = async {
+                     // Spot XAU/USD tercih edilir; sağlayıcıda yoksa USD/ons cinsinden COMEX vadeli altın yalnız gösterim yedeğidir.
+-                    strict.fetchExternalQuote("XAUUSD", listOf("XAUUSD=X", "GC=F")).stock
++                    external.load("XAUUSD", listOf("XAUUSD=X", "GC=F"))
+                 }
+                 val viop30Deferred = async {
+                     if (!ProviderReadinessService.isValidHttps(settings.baseUrl)) return@async null
+@@ -233,11 +233,11 @@
+                     marketTile(R.id.marketBist30Value, R.id.marketBist30Change, R.id.marketBist30Spark),
+                     bist30Deferred.await()
+                 )
+-                bindStockTile(
++                bindExternalMarketTile(
+                     marketTile(R.id.marketUsdValue, R.id.marketUsdChange, R.id.marketUsdSpark),
+                     usdDeferred.await()
+                 )
+-                bindStockTile(
++                bindExternalMarketTile(
+                     marketTile(R.id.marketGoldValue, R.id.marketGoldChange, R.id.marketGoldSpark),
+                     goldDeferred.await()
+                 )
+@@ -257,6 +257,47 @@
+         bindMarketTile(tile, price, change, stock.candles)
+     }
+ 
++    private fun bindExternalMarketTile(tile: TileViews, result: ExternalMarketQuoteService.Result) {
++        val stock = result.stock
++        if (stock == null) {
++            tile.value.text = "—"
++            tile.change.text = when {
++                result.fallback.state == ExternalMarketQuoteService.StageState.DISABLED -> "Yedek kapalı"
++                result.fallback.state == ExternalMarketQuoteService.StageState.FAILED -> "Veri alınamadı"
++                else -> "Veri yok"
++            }
++            tile.change.setTextColor(getColor(R.color.text_muted))
++            tile.spark.text = "—"
++            tile.spark.setTextColor(getColor(R.color.text_muted))
++            return
++        }
++        val price = stock.quotePrice ?: stock.candles.lastOrNull()?.close ?: return
++        tile.value.text = NumberFormat.getNumberInstance(trLocale).apply {
++            minimumFractionDigits = 2
++            maximumFractionDigits = 2
++        }.format(price)
++        if (result.isCached) {
++            val time = if (stock.dataTimestamp > 0L) SimpleDateFormat("HH:mm", trLocale).format(Date(stock.dataTimestamp)) else "—"
++            tile.change.text = "SON BAŞARILI • $time"
++            tile.change.setTextColor(getColor(R.color.text_muted))
++            tile.spark.text = "CACHE"
++            tile.spark.setTextColor(getColor(R.color.text_muted))
++            return
++        }
++        val previous = stock.previousClose ?: stock.candles.dropLast(1).lastOrNull()?.close
++        val change = previous?.takeIf { it > 0.0 }?.let { ((price - it) / it) * 100.0 }
++        if (change == null || !change.isFinite()) {
++            tile.change.text = "Yedek • Değişim —"
++            tile.change.setTextColor(getColor(R.color.text_muted))
++        } else {
++            val up = change >= 0
++            tile.change.text = "${if (up) "▲" else "▼"} ${String.format(trLocale, "%.2f%%", kotlin.math.abs(change))}"
++            tile.change.setTextColor(getColor(if (up) R.color.green else R.color.red))
++        }
++        tile.spark.text = "YEDEK"
++        tile.spark.setTextColor(getColor(R.color.text_muted))
++    }
++
+     private fun bindQuoteTile(tile: TileViews, quote: tr.borsatakip.v5.model.ViopQuote?) {
+         if (quote == null) {
+             tile.value.text = "—"
