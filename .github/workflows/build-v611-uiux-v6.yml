@@ -61,11 +61,13 @@ jobs:
           SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
           XML="$ANDROID_DIR/app/src/main/res/layout/activity_viop.xml"
           TEST="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt"
+          SHA_FAIL=0
           sha_check() {
             local path="$1" expected="$2" actual
             actual="$(git hash-object "$path")"
             echo "SHA_CHECK path=$path actual=$actual expected=$expected"
-            test "$actual" = "$expected"
+            if [ "$actual" != "$expected" ]; then SHA_FAIL=1; fi
+            return 0
           }
           sha_check "$TEST" '8d2aa5c7994ad1550f87a1726369e019433fd3b7'
           sha_check "$SRC/data/BackendPreflightClient.kt" '2593f6b14ee33ff0a1f3e0309f519d388fed6411'
@@ -79,6 +81,7 @@ jobs:
           sha_check "$SRC/ui/StocksCompactAdapter.kt" 'ef1abd8d30305097ef8fa0b2027d7f6d65f3b756'
           sha_check "$SRC/ui/ViopActivity.kt" 'ea2c17aaca64c3eb035c0a761de7be687dfaa04d'
           sha_check "$XML" '302bd4397ab5d81e3f5521f3ad54e3656cde145b'
+          test "$SHA_FAIL" -eq 0
           ! grep -R -F 'takeIf { it.size >= 2 }?.get(it.lastIndex - 1)' "$SRC/ui"
           grep -Fq 'showUnavailableSummary("Veri bekleniyor")' "$SRC/ui/ViopActivity.kt"
           grep -Fq 'Güç $directionScore' "$SRC/ui/StocksCompactAdapter.kt"
