@@ -1,0 +1,153 @@
+--- a/app/src/main/res/layout/activity_scan_results.xml
++++ b/app/src/main/res/layout/activity_scan_results.xml
+@@ -61,48 +61,76 @@
+             android:textSize="11sp"
+             android:textStyle="bold" />
+ 
+-        <HorizontalScrollView
++        <LinearLayout
+             android:layout_width="match_parent"
+             android:layout_height="wrap_content"
+             android:layout_marginTop="5dp"
+-            android:fillViewport="false"
+-            android:scrollbars="none">
++            android:orientation="horizontal"
++            android:weightSum="5">
+ 
+-            <LinearLayout
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:orientation="horizontal">
+-
+-                <Button
+-                    android:id="@+id/scanAll"
+-                    style="@style/ScanFilterButton"
+-                    android:text="@string/auto_text_ed61bdd83b" />
+-
+-                <Button
+-                    android:id="@+id/scanLong"
+-                    style="@style/ScanFilterButton"
+-                    android:layout_marginStart="6dp"
+-                    android:text="@string/auto_text_0b718d8575" />
+-
+-                <Button
+-                    android:id="@+id/scanShort"
+-                    style="@style/ScanFilterButton"
+-                    android:layout_marginStart="6dp"
+-                    android:text="@string/auto_text_338006fefa" />
+-
+-                <Button
+-                    android:id="@+id/scan85"
+-                    style="@style/ScanFilterButton"
+-                    android:layout_marginStart="6dp"
+-                    android:text="@string/auto_text_cac0b8c5cf" />
+-
+-                <Button
+-                    android:id="@+id/scanScore"
+-                    style="@style/ScanFilterButton"
+-                    android:layout_marginStart="6dp"
+-                    android:text="@string/auto_text_76ec87dddf" />
+-            </LinearLayout>
+-        </HorizontalScrollView>
++            <Button
++                android:id="@+id/scanAll"
++                style="@style/ScanFilterButton"
++                android:layout_width="0dp"
++                android:layout_weight="1"
++                android:layout_marginEnd="2dp"
++                android:maxLines="2"
++                android:autoSizeTextType="uniform"
++                android:autoSizeMinTextSize="8sp"
++                android:autoSizeMaxTextSize="11sp"
++                android:text="@string/auto_text_ed61bdd83b" />
++
++            <Button
++                android:id="@+id/scanLong"
++                style="@style/ScanFilterButton"
++                android:layout_width="0dp"
++                android:layout_weight="1"
++                android:layout_marginStart="2dp"
++                android:layout_marginEnd="2dp"
++                android:maxLines="2"
++                android:autoSizeTextType="uniform"
++                android:autoSizeMinTextSize="8sp"
++                android:autoSizeMaxTextSize="11sp"
++                android:text="@string/auto_text_0b718d8575" />
++
++            <Button
++                android:id="@+id/scanShort"
++                style="@style/ScanFilterButton"
++                android:layout_width="0dp"
++                android:layout_weight="1"
++                android:layout_marginStart="2dp"
++                android:layout_marginEnd="2dp"
++                android:maxLines="2"
++                android:autoSizeTextType="uniform"
++                android:autoSizeMinTextSize="8sp"
++                android:autoSizeMaxTextSize="11sp"
++                android:text="@string/auto_text_338006fefa" />
++
++            <Button
++                android:id="@+id/scan85"
++                style="@style/ScanFilterButton"
++                android:layout_width="0dp"
++                android:layout_weight="1"
++                android:layout_marginStart="2dp"
++                android:layout_marginEnd="2dp"
++                android:maxLines="2"
++                android:autoSizeTextType="uniform"
++                android:autoSizeMinTextSize="7sp"
++                android:autoSizeMaxTextSize="10sp"
++                android:text="@string/auto_text_cac0b8c5cf" />
++
++            <Button
++                android:id="@+id/scanScore"
++                style="@style/ScanFilterButton"
++                android:layout_width="0dp"
++                android:layout_weight="1"
++                android:layout_marginStart="2dp"
++                android:maxLines="2"
++                android:autoSizeTextType="uniform"
++                android:autoSizeMinTextSize="7sp"
++                android:autoSizeMaxTextSize="10sp"
++                android:text="@string/auto_text_76ec87dddf" />
++        </LinearLayout>
+     </LinearLayout>
+ 
+     <androidx.recyclerview.widget.RecyclerView
+--- a/app/src/test/java/tr/borsatakip/v5/data/ExternalMarketQuotePolicyTest.kt
++++ b/app/src/test/java/tr/borsatakip/v5/data/ExternalMarketQuotePolicyTest.kt
+@@ -0,0 +1,33 @@
++package tr.borsatakip.v5.data
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ExternalMarketQuotePolicyTest {
++    @Test fun fallbackRequiresBothUserFlags() {
++        assertFalse(ExternalMarketQuotePolicy.fallbackAllowed(false, false))
++        assertFalse(ExternalMarketQuotePolicy.fallbackAllowed(true, false))
++        assertFalse(ExternalMarketQuotePolicy.fallbackAllowed(false, true))
++        assertTrue(ExternalMarketQuotePolicy.fallbackAllowed(true, true))
++    }
++
++    @Test fun sourcePriorityIsFallbackThenCacheThenNone() {
++        assertEquals(ExternalMarketQuotePolicy.SourceChoice.FALLBACK, ExternalMarketQuotePolicy.chooseSource(true, true))
++        assertEquals(ExternalMarketQuotePolicy.SourceChoice.CACHE, ExternalMarketQuotePolicy.chooseSource(false, true))
++        assertEquals(ExternalMarketQuotePolicy.SourceChoice.NONE, ExternalMarketQuotePolicy.chooseSource(false, false))
++    }
++
++    @Test fun marketCapabilityMappingIsExplicit() {
++        assertEquals("FX", ExternalMarketQuotePolicy.capabilityMarket("USDTRY"))
++        assertEquals("COMMODITY", ExternalMarketQuotePolicy.capabilityMarket("XAUUSD"))
++        assertEquals(null, ExternalMarketQuotePolicy.capabilityMarket("XU100"))
++    }
++
++    @Test fun providerErrorsAreClassifiedWithoutSecrets() {
++        assertEquals("RATE_LIMIT", ExternalMarketQuotePolicy.classifyProviderError("Yahoo HTTP 429"))
++        assertEquals("NETWORK_ERROR", ExternalMarketQuotePolicy.classifyProviderError("UnknownHostException"))
++        assertEquals("PARSE_ERROR", ExternalMarketQuotePolicy.classifyProviderError("Yahoo cevap yapısı geçersiz"))
++    }
++}
