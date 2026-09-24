@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - '.ci/v611-uiux-v6-fixes.py'
+      - '.ci/v611-uiux-v6-copy-fixes.py'
       - '.ci/v611-overlay-r3/**'
       - '.github/workflows/build-v611-uiux-v6.yml'
   workflow_dispatch:
@@ -86,8 +87,21 @@ jobs:
           grep -Fq 'showUnavailableSummary("Veri bekleniyor")' "$SRC/ui/ViopActivity.kt"
           grep -Fq 'Güç $directionScore' "$SRC/ui/StocksCompactAdapter.kt"
           grep -Fq 'marketSummaryReady' "$SRC/ui/StocksActivity.kt"
+
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-copy-fixes.py" "$ANDROID_DIR"
+
+          grep -Fq 'ManualScanStatus.RUNNING -> "TARANIYOR"' "$SRC/ui/BistScanActivity.kt"
+          grep -Fq 'ManualScanStatus.ERROR -> "HATA"' "$SRC/ui/BistScanActivity.kt"
+          grep -Fq 'HistoryLoadState.NO_HISTORY -> "Geçerli sinyal geçmişi yok.' "$SRC/ui/SignalHistoryActivity.kt"
+          grep -Fq 'HistoryLoadState.HISTORY_LOAD_ERROR -> "Sinyal geçmişi okunamadı.' "$SRC/ui/SignalHistoryActivity.kt"
+          ! grep -Fq 'Veri yenilenemedi: ${result.failureCode}' "$SRC/ui/SettingsActivity.kt"
+          ! grep -Fq '$prefix: ${result.failureCode}' "$SRC/ui/SettingsActivity.kt"
+          grep -Fq 'VİOP veri kaynağı doğrulanıyor…' "$SRC/ui/ViopActivity.kt"
+          grep -Fq 'Veri doğrulanamadı • gerçek VİOP sinyali yayımlanmaz' "$SRC/ui/ViopActivity.kt"
+          ! grep -Fq 'VİOP veri servisi hazır değil • ${local.failureCode}' "$SRC/ui/ViopActivity.kt"
+
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
-          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + UIUX-V6 fixes' >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + UIUX-V6 fixes + professional user copy fixes' >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
