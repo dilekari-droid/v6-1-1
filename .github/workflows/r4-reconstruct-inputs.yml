@@ -1,0 +1,61 @@
+name: V6.1.1 R4 Reconstruct Inputs
+
+on:
+  push:
+    branches: [ r4-sync-stage ]
+    paths:
+      - '.github/workflows/r4-reconstruct-inputs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct Android source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/android-payload
+          mapfile -t parts < <(find .ci/v611-source -maxdepth 1 -type f -name 'part*.b64' | sort -V)
+          test "${#parts[@]}" -gt 0
+          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/android.tar.xz
+          xz --test /tmp/android.tar.xz
+          tar -xJf /tmp/android.tar.xz -C out/android-payload
+          find out/android-payload -type f -print0 | sort -z | xargs -0 sha256sum > out/android-payload.sha256
+
+      - name: Reconstruct exact R4 backend payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/backend-payload
+          mapfile -t parts < <(find .ci/v611-backend-r4 -maxdepth 1 -type f -name 'part*.b64' | sort -V)
+          test "${#parts[@]}" -eq 10
+          cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/backend.tar.xz
+          echo 'a8272efc8853e500d3a83578fa6658da1a10157ae865eca7a6342c82eae98e61  /tmp/backend.tar.xz' | sha256sum -c -
+          xz --test /tmp/backend.tar.xz
+          tar -xJf /tmp/backend.tar.xz -C out/backend-payload
+          find out/backend-payload -type f -print0 | sort -z | xargs -0 sha256sum > out/backend-payload.sha256
+
+      - name: Record reconstruction metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "HEAD_SHA=${GITHUB_SHA}"
+            echo "ANDROID_FILES=$(find out/android-payload -type f | wc -l)"
+            echo "BACKEND_FILES=$(find out/backend-payload -type f | wc -l)"
+          } | tee out/RECONSTRUCTION.txt
+
+      - name: Upload reconstructed inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-R4-reconstructed-inputs
+          path: out
+          if-no-files-found: error
+          retention-days: 7
