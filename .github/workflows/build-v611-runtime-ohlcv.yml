@@ -7,6 +7,7 @@ on:
       - '.ci/v611-runtime-ohlcv-v611/**'
       - '.ci/v611-runtime-network-resilience.py'
       - '.ci/v611-external-market-fallback/**'
+      - '.ci/v611-filter-ui-responsive.py'
       - '.ci/v611-uiux-v6-fixes.py'
       - '.ci/v611-uiux-v6-copy-fixes.py'
       - '.ci/v611-uiux-v6-favorites-failclosed.py'
@@ -132,10 +133,12 @@ jobs:
           echo '0d228a161b0638a6818c81bfbaa26f5f493e9df2421c1c920d296b8360b2925f  /tmp/v611-external-market-fallback.py' | sha256sum -c -
           python -m py_compile /tmp/v611-external-market-fallback.py
           python /tmp/v611-external-market-fallback.py "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-filter-ui-responsive.py" "$ANDROID_DIR"
 
           SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
           TESTSRC="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5"
           STRINGS="$ANDROID_DIR/app/src/main/res/values/strings.xml"
+          FILTER_LAYOUT="$ANDROID_DIR/app/src/main/res/layout/activity_scan_results.xml"
 
           grep -q 'applicationId = "tr.borsatakip.v5"' "$ANDROID_DIR/app/build.gradle.kts"
           grep -q 'versionCode = 611' "$ANDROID_DIR/app/build.gradle.kts"
@@ -175,6 +178,12 @@ jobs:
           grep -Fq 'ScanResultSortPolicy.directional' "$SRC/ui/ScanResultsActivity.kt"
           grep -Fq 'LONG SİNYALİ BULUNAMADI' "$SRC/ui/ScanResultsActivity.kt"
           grep -Fq 'SHORT SİNYALİ BULUNAMADI' "$SRC/ui/ScanResultsActivity.kt"
+          grep -Fq '@+id/scanResultFilters' "$FILTER_LAYOUT"
+          grep -Fq 'android:weightSum="5"' "$FILTER_LAYOUT"
+          grep -Fq 'android:autoSizeMinTextSize="7sp"' "$FILTER_LAYOUT"
+          grep -Fq 'selected -> R.color.white' "$SRC/ui/ScanResultsActivity.kt"
+          test "$(git hash-object "$SRC/ui/ScanResultsActivity.kt")" = '14bedb30b021740c4510e6087a6c2990584843df'
+          test "$(git hash-object "$FILTER_LAYOUT")" = 'b76a46bee0aa459044174ad4fbdfde02e71bac70'
 
           # External-market fail-closed/fallback/cache source gates. Echo every actual SHA for diagnostics.
           EXT_SHA_FAIL=0
@@ -214,7 +223,7 @@ jobs:
           grep -Fq 'GC=F' "$SRC/ui/ViopActivity.kt"
           ! grep -Fq 'Doğrulanmış kaynak yok' "$SRC/ui/ViopActivity.kt"
 
-          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + proven UIUX-V6 chain + runtime/OHLCV overlay 464da8f9 + network resilience 4d07a4c9 + external market fallback/cache 0d228a16' >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + proven UIUX-V6 chain + runtime/OHLCV overlay 464da8f9 + network resilience 4d07a4c9 + external market fallback/cache 0d228a16 + responsive filter cbb570ce' >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
