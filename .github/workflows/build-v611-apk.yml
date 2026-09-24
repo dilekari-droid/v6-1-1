@@ -73,18 +73,17 @@ jobs:
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
           echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay' >> "$GITHUB_ENV"
 
-      - name: Apply V6.1.1 compile fixes
+      - name: Apply V6.1.1 source fixes
         shell: bash
         run: |
           set -euo pipefail
           ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
           SRC_ROOT="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
+          XML_VIOP="$ANDROID_DIR/app/src/main/res/layout/activity_viop.xml"
 
-          # R3 kept ResearchPolicies/NewsResearchAdapter but removed their model types.
           git -C "$GITHUB_WORKSPACE/base-v5" show HEAD:android/app/src/main/java/tr/borsatakip/v5/research/ResearchModels.kt \
             > "$SRC_ROOT/research/ResearchModels.kt"
 
-          # R3 BackendSessionClient depends on this new single-flight primitive.
           cat > "$SRC_ROOT/data/SessionRefreshGate.kt" <<'KOTLIN'
           package tr.borsatakip.v5.data
 
@@ -110,7 +109,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          root = Path('base-v5/android/app/src/main/java/tr/borsatakip/v5')
+          android = Path('base-v5/android')
+          root = android / 'app/src/main/java/tr/borsatakip/v5'
 
           settings = root / 'data/SettingsStore.kt'
           lines = settings.read_text().splitlines()
@@ -172,9 +172,31 @@ jobs:
 
           replace_https_validator('data/BackendPreflightClient.kt', 'fun validHttps(raw: String): Boolean = runCatching {')
           replace_https_validator('data/ProviderReadinessService.kt', 'fun isValidHttps(raw: String): Boolean = runCatching {')
+
+          # V6.1.1 VIOP fail-closed initial UI state: no numeric zero before a real scan result exists.
+          xml = android / 'app/src/main/res/layout/activity_viop.xml'
+          text = xml.read_text()
+          replacements = {
+              'android:text="VİOP LONG\\n0"': 'android:text="VİOP LONG\\n—"',
+              'android:text="VİOP SHORT\\n0"': 'android:text="VİOP SHORT\\n—"',
+              'android:text="İZLE\\n0"': 'android:text="İZLE\\n—"',
+              'android:text="TARANAN\\n0"': 'android:text="TARANAN\\n—"',
+          }
+          for before, after in replacements.items():
+              if text.count(before) != 1:
+                  raise SystemExit(f'activity_viop.xml expected once: {before!r}, got {text.count(before)}')
+              text = text.replace(before, after)
+          xml.write_text(text)
+
+          viop = root / 'ui/ViopActivity.kt'
+          body = viop.read_text()
+          anchor = '        setContentView(R.layout.activity_viop)\n        setupBottomNav()'
+          replacement = '        setContentView(R.layout.activity_viop)\n        showUnavailableSummary("Veri bekleniyor")\n        setupBottomNav()'
+          if body.count(anchor) != 1:
+              raise SystemExit(f'ViopActivity onCreate anchor count={body.count(anchor)}')
+          viop.write_text(body.replace(anchor, replacement, 1))
           PY
 
-          # The R3 source removes BackendUrlPolicy; keep the inherited V5 unit test on current validators.
           cat > "$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt" <<'KOTLIN'
           package tr.borsatakip.v5.data
 
@@ -214,10 +236,16 @@ jobs:
           test "$(git hash-object "$SRC_ROOT/research/ResearchModels.kt")" = 'f8e1e965936659f7822bbc558ed9aab434bd6b4b'
           test "$(git hash-object "$SRC_ROOT/ui/BistScanActivity.kt")" = 'bb44655d5a665f359af06e8746b9f8e4b361d31c'
           test "$(git hash-object "$SRC_ROOT/ui/OpportunityActivity.kt")" = '35c5113ec523c1b836b49e0427ee7e51e7103528'
-          test "$(git hash-object "$SRC_ROOT/ui/ViopActivity.kt")" = '4023bf607f95e85b625f9915944dafab234b9c75'
+          test "$(git hash-object "$SRC_ROOT/ui/ViopActivity.kt")" = '1fc208522587b0c3f5c84d74751264f938e9dc56'
+          test "$(git hash-object "$XML_VIOP")" = 'b5d7ee085be58fb3bce8a1fdb086d7fba6f12216'
           test "$(grep -c 'companion object' "$SRC_ROOT/data/SettingsStore.kt")" -eq 1
           ! grep -R -F 'takeIf { it.size >= 2 }?.get(it.lastIndex - 1)' "$SRC_ROOT/ui"
-          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + compile fixes' >> "$GITHUB_ENV"
+          grep -Fq 'android:text="VİOP LONG\n—"' "$XML_VIOP"
+          grep -Fq 'android:text="VİOP SHORT\n—"' "$XML_VIOP"
+          grep -Fq 'android:text="İZLE\n—"' "$XML_VIOP"
+          grep -Fq 'android:text="TARANAN\n—"' "$XML_VIOP"
+          grep -Fq 'showUnavailableSummary("Veri bekleniyor")' "$SRC_ROOT/ui/ViopActivity.kt"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + compile/security/VIOP fail-closed fixes' >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
