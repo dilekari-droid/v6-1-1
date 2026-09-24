@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_screen_gradient">
+
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+            <TextView android:id="@+id/title" style="@style/Title" />
+            <TextView android:id="@+id/subtitle" style="@style/Sub" android:layout_marginTop="2dp" />
+
+            <Button
+                android:id="@+id/btnTradingViewChart"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_tradingview_button"
+                android:backgroundTint="@null"
+                android:drawableEnd="@drawable/ic_open_external"
+                android:drawablePadding="10dp"
+                android:elevation="3dp"
+                android:gravity="center"
+                android:minHeight="56dp"
+                android:minWidth="0dp"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:text="TRADINGVIEW GRAFİĞİNİ AÇ"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="14dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="● CANLI PİYASA + TRADINGVIEW"
+                    android:textColor="@color/green"
+                    android:textStyle="bold"
+                    android:textSize="16sp" />
+                <TextView android:id="@+id/liveConnectionStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Canlı kanal hazırlanıyor…" android:textColor="@color/text_secondary" />
+                <TextView android:id="@+id/liveQuote" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Son fiyat bekleniyor" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="16sp" />
+                <TextView android:id="@+id/liveMomentum" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="1 DK MOMENTUM: canlı mum bekleniyor" android:textColor="@color/text_secondary" android:textStyle="bold" />
+                <TextView android:id="@+id/liveVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="HACİM: veri bekleniyor" android:textColor="@color/text_secondary" />
+                <TextView android:id="@+id/liveTrend" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="TREND: değerlendiriliyor" android:textColor="@color/text_secondary" android:textStyle="bold" />
+                <TextView android:id="@+id/liveV5Score" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="V5 SKOR: — / 100" android:textColor="@color/yellow" android:textStyle="bold" android:textSize="18sp" />
+                <TextView android:id="@+id/liveDecision" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_chip" android:padding="10dp" android:text="V5 KARARI: veri bekleniyor" android:textColor="@color/yellow" android:textStyle="bold" android:textSize="16sp" />
+                <TextView android:id="@+id/liveCandle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="1 dk mum bekleniyor" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="TRADINGVIEW DOĞRULAMASI" android:textColor="@color/blue" android:textStyle="bold" />
+                <TextView android:id="@+id/liveTradingViewSignal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="TradingView alarmı bekleniyor" android:textColor="@color/text_secondary" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="V5 yalnız tarama ve karar desteği üretir. Emir, kullanıcı tarafından TradingView/broker üzerinden verilir; V5 gerçekleşmemiş bir emri gerçekleşmiş gibi göstermez."
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView android:id="@+id/scoreSummary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/bg_card_blue" android:padding="16dp" android:textColor="@color/white" android:textStyle="bold" android:textSize="15sp" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/auto_text_7ec8867439" android:textColor="@color/blue" android:textStyle="bold" />
+            <TextView android:id="@+id/overview" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" android:lineSpacingExtra="4dp" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/auto_text_130cb16188" android:textColor="@color/blue" android:textStyle="bold" />
+            <TextView android:id="@+id/trendCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" />
+            <TextView android:id="@+id/momentumCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" />
+            <TextView android:id="@+id/macdCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" />
+            <TextView android:id="@+id/volumeCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" />
+            <TextView android:id="@+id/extraCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/auto_text_f9178a0c94" android:textColor="@color/blue" android:textStyle="bold" />
+            <TextView android:id="@+id/technicalDetails" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" android:lineSpacingExtra="4dp" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/auto_text_35c04e7eac" android:textColor="@color/blue" android:textStyle="bold" android:textSize="18sp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:clipToPadding="false"
+                android:fillViewport="false"
+                android:scrollbars="none">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <Button
+                        android:id="@+id/chartZoomIn"
+                        android:layout_width="52dp"
+                        android:layout_height="48dp"
+                        android:minWidth="0dp"
+                        android:minHeight="48dp"
+                        android:text="@string/auto_text_75e9d841ba"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                    <Button
+                        android:id="@+id/chartZoomOut"
+                        android:layout_width="52dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="6dp"
+                        android:minWidth="0dp"
+                        android:minHeight="48dp"
+                        android:text="@string/auto_text_22215d8deb"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                    <Button
+                        android:id="@+id/btnTimeframeMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="8dp"
+                        android:minWidth="118dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:maxLines="1"
+                        android:ellipsize="none"
+                        android:text="@string/auto_text_0be7600ee1"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                    <Button android:id="@+id/toggleEma20" style="@style/ScanFilterButton" android:text="@string/auto_text_85744e53c1" android:layout_marginStart="8dp" android:minHeight="48dp" />
+                    <Button android:id="@+id/toggleEma50" style="@style/ScanFilterButton" android:text="@string/auto_text_932eead5fe" android:layout_marginStart="4dp" android:minHeight="48dp" />
+                    <Button android:id="@+id/toggleEma200" style="@style/ScanFilterButton" android:text="@string/auto_text_92bf6e3831" android:layout_marginStart="4dp" android:minHeight="48dp" />
+                    <Button android:id="@+id/toggleBollinger" style="@style/ScanFilterButton" android:text="@string/auto_text_4fc324c8ac" android:layout_marginStart="4dp" android:minHeight="48dp" />
+                    <Button android:id="@+id/toggleTrend" style="@style/ScanFilterButton" android:text="@string/auto_text_171afcc335" android:layout_marginStart="4dp" android:minHeight="48dp" />
+                    <Button android:id="@+id/toggleChannel" style="@style/ScanFilterButton" android:text="@string/auto_text_542c04d354" android:layout_marginStart="4dp" android:minHeight="48dp" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <FrameLayout android:layout_width="match_parent" android:layout_height="600dp" android:layout_marginTop="8dp">
+                <tr.borsatakip.v5.ui.PriceChartView android:id="@+id/chart" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_card" android:padding="8dp" />
+                <Button
+                    android:id="@+id/chartFullscreen"
+                    android:layout_width="52dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|top"
+                    android:layout_margin="8dp"
+                    android:minWidth="0dp"
+                    android:minHeight="48dp"
+                    android:text="@string/auto_text_fa1d2d35b2"
+                    android:textSize="18sp" />
+            </FrameLayout>
+            <TextView android:id="@+id/chartStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="@color/text_secondary" android:textSize="12sp" />
+            <TextView android:id="@+id/trendInfoPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_card" android:padding="12dp" android:textColor="@color/text_primary" android:textSize="12sp" android:lineSpacingExtra="2dp" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/auto_text_5a46338ff1" android:textColor="@color/blue" android:textStyle="bold" />
+            <TextView android:id="@+id/dataQuality" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" android:lineSpacingExtra="4dp" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/auto_text_187b6aba4b" android:textColor="@color/blue" android:textStyle="bold" />
+            <TextView android:id="@+id/dataStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/text_primary" android:lineSpacingExtra="4dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="12dp">
+                <Button android:id="@+id/btnTechnicalScreen" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/auto_text_fdb855be9e" />
+                <Button android:id="@+id/btnNewsScreen" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/auto_text_2c519de3dd" />
+                <Button android:id="@+id/btnSignalScreen" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/auto_text_bc91974754" />
+            </LinearLayout>
+
+            <TextView android:id="@+id/validity" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:padding="14dp" android:textColor="@color/yellow" android:textStyle="bold" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:padding="12dp" android:textColor="@color/text_secondary" android:text="@string/auto_text_3136b3e2bb" android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/include_bottom_nav" />
+</LinearLayout>

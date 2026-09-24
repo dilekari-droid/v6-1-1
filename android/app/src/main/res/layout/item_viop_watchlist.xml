@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="68dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="2dp"
+    android:background="@drawable/bg_viop_watch_row">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1.55"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingEnd="6dp">
+        <TextView
+            android:id="@+id/viopWatchSymbol"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/viopWatchUnderlying"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/text_secondary"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/viopWatchLast"
+        android:layout_width="70dp"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textColor="@color/text_primary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/viopWatchChange"
+        android:layout_width="66dp"
+        android:layout_height="34dp"
+        android:background="@drawable/bg_chip"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingHorizontal="3dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/viopWatchStatus"
+        android:layout_width="76dp"
+        android:layout_height="34dp"
+        android:layout_marginStart="5dp"
+        android:background="@drawable/bg_chip"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:paddingHorizontal="3dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="8sp" />
+
+    <TextView
+        android:id="@+id/viopWatchRemove"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_marginStart="3dp"
+        android:gravity="center"
+        android:text="×"
+        android:textColor="@color/red"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+</LinearLayout>

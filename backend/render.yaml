@@ -1,0 +1,116 @@
+services:
+  - type: web
+    name: borsatakip-production-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /v1/health
+    envVars:
+      - key: APP_ENV
+        value: "production"
+      - key: TRADEWIZE_API_KEY
+        sync: false
+      - key: TRADEWIZE_ACCESS_TOKEN
+        sync: false
+      - key: APP_API_KEY
+        sync: false
+      - key: MAX_DATA_AGE_MS
+        value: "5000"
+      - key: SCANNER_MAX_SYMBOLS
+        value: "1000"
+      - key: SCANNER_BATCH_SIZE
+        value: "60"
+      - key: SCANNER_CONCURRENCY
+        value: "2"
+      - key: SCANNER_PACING_MS
+        value: "720"
+      - key: SCANNER_RATE_LIMIT_WEIGHT_PER_MINUTE
+        value: "120"
+      - key: SCANNER_REQUESTS_PER_HOUR
+        value: "5000"
+      - key: SCANNER_REQUEST_WEIGHT
+        value: "1"
+      - key: UPSTREAM_QUOTA_SCOPE
+        value: "all"
+      # Cross-instance provider quota remains off until a real Redis service is connected.
+      - key: UPSTREAM_DISTRIBUTED_QUOTA
+        value: "false"
+      - key: UPSTREAM_DISTRIBUTED_QUOTA_KEY
+        value: "borsatakip:provider-quota:v1"
+      - key: REDIS_URL
+        sync: false
+      - key: SNAPSHOT_BATCH_MAX_SYMBOLS
+        value: "20"
+      - key: SNAPSHOT_BATCH_READ_TIMEOUT_MS
+        value: "175000"
+      - key: SNAPSHOT_BATCH_CALL_TIMEOUT_MS
+        value: "180000"
+      - key: SNAPSHOT_BATCH_OUTER_TIMEOUT_MS
+        value: "185000"
+      - key: SNAPSHOT_BATCH_IDEMPOTENCY_TTL_SECONDS
+        value: "120"
+      - key: SNAPSHOT_BATCH_IDEMPOTENCY_MAX_ENTRIES
+        value: "2048"
+      - key: SCANNER_RETRY_COUNT
+        value: "2"
+      - key: SCANNER_RETRY_BASE_MS
+        value: "500"
+      - key: SCANNER_INTERVAL
+        value: "5m"
+      - key: SCANNER_HISTORY_BARS
+        value: "120"
+      - key: CAPABILITY_CACHE_SECONDS
+        value: "10"
+      - key: ALL_TIME_HISTORY_VERIFIED
+        value: "false"
+      - key: ALL_TIME_HISTORY_START_MS
+        value: "1"
+      - key: BAR_CACHE_TTL_SECONDS
+        value: "30"
+      - key: BAR_CACHE_MAX_BARS
+        value: "2500"
+      - key: BAR_CACHE_IDLE_TTL_SECONDS
+        value: "900"
+      - key: BAR_CACHE_MAX_KEYS
+        value: "1600"
+      - key: BAR_CACHE_MAX_TOTAL_BARS
+        value: "250000"
+      - key: INGRESS_RATE_LIMIT_PER_MINUTE
+        value: "600"
+      - key: INGRESS_RATE_LIMIT_BURST
+        value: "120"
+      - key: INGRESS_BUCKET_TTL_SECONDS
+        value: "900"
+      - key: INGRESS_BUCKET_MAX_ENTRIES
+        value: "4096"
+      - key: TRADEWIZE_VIOP_CONTRACT_METADATA_PATH
+        sync: false
+      - key: VIOP_METADATA_MAX_AGE_SECONDS
+        value: "86400"
+      - key: VIOP_METADATA_REQUIRE_UNIVERSE_AS_OF
+        value: "true"
+      - key: VIOP_METADATA_REQUIRE_COMPLETE
+        value: "true"
+      - key: VIOP_NEAR_EXPIRY_DAYS
+        value: "3"
+      - key: SESSION_TOKEN_SECRET
+        sync: false
+      - key: SESSION_TOKEN_TTL_SECONDS
+        value: "900"
+      - key: SESSION_TOKEN_MIN_SECRET_LENGTH
+        value: "32"
+      - key: SESSION_TOKEN_KEY_ID
+        value: "v1"
+      - key: SESSION_TOKEN_NOT_BEFORE
+        value: "0"
+      - key: SESSION_TOKEN_PREVIOUS_KEYS_JSON
+        sync: false
+      - key: SESSION_REVOKE_MAX_ENTRIES
+        value: "10000"
+      # Persistence/prewarm paths are intentionally not set on ephemeral storage by default.
+      - key: BAR_CACHE_PREWARM_BIST_UNIVERSE
+        value: "false"
+      - key: BAR_CACHE_PREWARM_INTERVALS
+        value: "5m,1d"
+      - key: BAR_CACHE_PREWARM_MAX_SYMBOLS
+        value: "1000"

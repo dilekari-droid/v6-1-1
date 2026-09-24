@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_screen_gradient">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView style="@style/Title" android:text="@string/auto_text_2e3351f9a0" />
+        <TextView
+            android:id="@+id/historyStatus"
+            style="@style/Sub"
+            android:layout_marginTop="4dp"
+            android:text="@string/auto_text_08690d23cf" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/tabHistory" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_d3be8da608" />
+                <Button android:id="@+id/tabForward" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_e86913ff75" />
+                <Button android:id="@+id/tabStats" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_2e1d7860e8" />
+                <Button android:id="@+id/tabStrategies" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="STRATEJİ" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <LinearLayout
+            android:id="@+id/historyFilters"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <Button android:id="@+id/historyAll" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_ed61bdd83b" />
+                    <Button android:id="@+id/historyLong" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_0b718d8575" />
+                    <Button android:id="@+id/historyShort" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_338006fefa" />
+                    <Button android:id="@+id/history85" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_fe7d16f0e9" />
+                    <Button android:id="@+id/history75" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_e23eb1d29e" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <EditText
+                android:id="@+id/historySymbol"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/auto_hint_29c0fa56cc"
+                android:inputType="textCapCharacters" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <EditText
+                    android:id="@+id/historyFrom"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/auto_hint_59fb745a79"
+                    android:inputType="date" />
+                <EditText
+                    android:id="@+id/historyTo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/auto_hint_8bfecdd1a4"
+                    android:inputType="date" />
+            </LinearLayout>
+            <Button
+                android:id="@+id/historyApply"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/auto_text_2471e1cb98" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/strategyMarketBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone">
+            <Button
+                android:id="@+id/strategyBist"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="BIST" />
+            <Button
+                android:id="@+id/strategyViop"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="VİOP" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:id="@+id/horizonBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:scrollbars="none">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/h15m" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_c0e36a1b80" />
+                <Button android:id="@+id/h30m" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_f54fde818a" />
+                <Button android:id="@+id/h1h" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_2d3c359be0" />
+                <Button android:id="@+id/h4h" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_0fa8522795" />
+                <Button android:id="@+id/h1d" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/auto_text_715986f229" />
+            </LinearLayout>
+        </HorizontalScrollView>
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/historyList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:id="@+id/forwardPanel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="18dp"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/forwardSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:lineSpacingExtra="5dp" />
+        <tr.borsatakip.v5.ui.ForwardCurveView
+            android:id="@+id/forwardCurve"
+            android:layout_width="match_parent"
+            android:layout_height="180dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card" />
+    </LinearLayout>
+
+    <include layout="@layout/include_bottom_nav" />
+</LinearLayout>

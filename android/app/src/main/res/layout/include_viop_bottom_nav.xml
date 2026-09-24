@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bottomNav"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:background="@color/bottom_nav"
+    android:elevation="12dp"
+    android:gravity="center"
+    android:orientation="horizontal">
+    <TextView android:id="@+id/navHome" style="@style/NavItem" android:text="⌂\nAna" android:textSize="8sp" />
+    <TextView android:id="@+id/navBist" style="@style/NavItem" android:text="▥\nHisseler" android:textSize="8sp" />
+    <TextView android:id="@+id/navViop" style="@style/NavItem" android:text="▮▮\nVİOP" android:textColor="@color/blue" android:textSize="8sp" android:textStyle="bold" />
+    <TextView android:id="@+id/navAnalysis" style="@style/NavItem" android:text="◈\nAnaliz" android:textSize="8sp" />
+    <TextView android:id="@+id/navFav" style="@style/NavItem" android:text="★\nFavori" android:textSize="8sp" />
+    <TextView android:id="@+id/navNews" style="@style/NavItem" android:text="☷\nHaber" android:textSize="8sp" />
+    <TextView android:id="@+id/navSettings" style="@style/NavItem" android:text="⚙\nAyar" android:textSize="8sp" />
+</LinearLayout>

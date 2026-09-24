@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_screen_gradient">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+            <TextView
+                android:id="@+id/detailBack"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_chip"
+                android:gravity="center"
+                android:paddingHorizontal="12dp"
+                android:text="‹ Geri"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold" />
+            <TextView android:id="@+id/detailTitle" style="@style/Title" android:layout_marginTop="12dp" />
+            <TextView android:id="@+id/detailSubtitle" style="@style/Sub" android:layout_marginTop="4dp" />
+            <LinearLayout
+                android:id="@+id/detailContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </ScrollView>
+    <include layout="@layout/include_bottom_nav" />
+</LinearLayout>
