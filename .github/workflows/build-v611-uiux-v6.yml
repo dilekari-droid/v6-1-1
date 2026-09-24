@@ -1,0 +1,123 @@
+name: V6.1.1 UIUX V6 Verified APK Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.ci/v611-uiux-v6-fixes.py'
+      - '.ci/v611-overlay-r3/**'
+      - '.github/workflows/build-v611-uiux-v6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout V6.1.1 payload repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned V5 Android base
+        uses: actions/checkout@v4
+        with:
+          repository: dilekari-droid/v5.1.1
+          ref: 28c18f669970f5a7621e89b80179c63c94b6f7aa
+          path: base-v5
+
+      - name: Reconstruct and verify V6.1.1 overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT='.ci/v611-overlay-r3'
+          PARTS=(
+            part00.b64 part01.b64 part02.b64 part03.b64 part04.b64
+            part05a.b64 part05b.b64 part06a.b64 part06b.b64
+            part07a.b64 part07b.b64 part08a.b64 part08b.b64 part09.b64
+          )
+          : > /tmp/v611-overlay.b64
+          for part in "${PARTS[@]}"; do test -s "$ROOT/$part"; cat "$ROOT/$part" >> /tmp/v611-overlay.b64; done
+          test "$(wc -c < /tmp/v611-overlay.b64)" -eq 73804
+          base64 -d /tmp/v611-overlay.b64 > /tmp/v611-overlay.tar.xz
+          echo '29989105d1adb64dcd6fb4a514f803adebfd693b07fe3ddbfe775127751e04fc  /tmp/v611-overlay.tar.xz' | sha256sum -c -
+          xz --test /tmp/v611-overlay.tar.xz
+
+      - name: Apply overlay and V6 UIUX source fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
+          tar -xJf /tmp/v611-overlay.tar.xz -C "$ANDROID_DIR"
+          test -f "$ANDROID_DIR/DELETE-LIST.txt"
+          while IFS= read -r rel; do test -n "$rel" || continue; rm -f -- "$ANDROID_DIR/$rel"; done < "$ANDROID_DIR/DELETE-LIST.txt"
+          rm -f "$ANDROID_DIR/DELETE-LIST.txt"
+          grep -q 'applicationId = "tr.borsatakip.v5"' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionCode = 556' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionName = "5.4.16"' "$ANDROID_DIR/app/build.gradle.kts"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-fixes.py" "$ANDROID_DIR"
+
+          SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
+          XML="$ANDROID_DIR/app/src/main/res/layout/activity_viop.xml"
+          TEST="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt"
+          test "$(git hash-object "$TEST")" = '8d2aa5c7994ad1550f87a1726369e019433fd3b7'
+          test "$(git hash-object "$SRC/data/BackendPreflightClient.kt")" = '2593f6b14ee33ff0a1f3e0309f519d388fed6411'
+          test "$(git hash-object "$SRC/data/ProviderReadinessService.kt")" = '6bbc9d98c6befde6152e8a83c876994db11ca4b0'
+          test "$(git hash-object "$SRC/data/SessionRefreshGate.kt")" = '97aff01ee90011db6fcd82f27e4730060c2f2cc1'
+          test "$(git hash-object "$SRC/data/SettingsStore.kt")" = '199a3c8075e2d6d8a9ca543485ad822cade8c6f8'
+          test "$(git hash-object "$SRC/research/ResearchModels.kt")" = 'f8e1e965936659f7822bbc558ed9aab434bd6b4b'
+          test "$(git hash-object "$SRC/ui/BistScanActivity.kt")" = 'bb44655d5a665f359af06e8746b9f8e4b361d31c'
+          test "$(git hash-object "$SRC/ui/OpportunityActivity.kt")" = '35c5113ec523c1b836b49e0427ee7e51e7103528'
+          test "$(git hash-object "$SRC/ui/StocksActivity.kt")" = 'd37ec28dbbc4839c009b955ea97ce2d728106991'
+          test "$(git hash-object "$SRC/ui/StocksCompactAdapter.kt")" = 'ef1abd8d30305097ef8fa0b2027d7f6d65f3b756'
+          test "$(git hash-object "$SRC/ui/ViopActivity.kt")" = 'ea2c17aaca64c3eb035c0a761de7be687dfaa04d'
+          test "$(git hash-object "$XML")" = '302bd4397ab5d81e3f5521f3ad54e3656cde145b'
+          ! grep -R -F 'takeIf { it.size >= 2 }?.get(it.lastIndex - 1)' "$SRC/ui"
+          grep -Fq 'showUnavailableSummary("Veri bekleniyor")' "$SRC/ui/ViopActivity.kt"
+          grep -Fq 'Güç $directionScore' "$SRC/ui/StocksCompactAdapter.kt"
+          grep -Fq 'marketSummaryReady' "$SRC/ui/StocksActivity.kt"
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + UIUX-V6 fixes' >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run Android unit tests
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
+
+      - name: Build debug APK
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Locate and verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$ANDROID_DIR/app/build/outputs/apk/debug" -type f -name '*.apk' | head -1)"
+          test -n "$APK"
+          mkdir -p out
+          cp "$APK" out/V6.1.1-UIUX-V6-debug.apk
+          sha256sum out/V6.1.1-UIUX-V6-debug.apk | tee out/V6.1.1-UIUX-V6-debug.apk.sha256
+          printf 'source=%s\n' "$SELECTED_SOURCE" | tee out/V6.1.1-UIUX-V6-source.txt
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-UIUX-V6-debug.apk | tee out/V6.1.1-UIUX-V6-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-UIUX-V6-debug.apk | tee out/V6.1.1-UIUX-V6-signature.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='556' versionName='5.4.16'" out/V6.1.1-UIUX-V6-badging.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-UIUX-V6-APK
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
