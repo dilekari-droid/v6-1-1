@@ -80,9 +80,11 @@ jobs:
           ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
           SRC_ROOT="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
 
+          # R3 kept ResearchPolicies/NewsResearchAdapter but removed their model types.
           git -C "$GITHUB_WORKSPACE/base-v5" show HEAD:android/app/src/main/java/tr/borsatakip/v5/research/ResearchModels.kt \
             > "$SRC_ROOT/research/ResearchModels.kt"
 
+          # R3 BackendSessionClient depends on this new single-flight primitive.
           cat > "$SRC_ROOT/data/SessionRefreshGate.kt" <<'KOTLIN'
           package tr.borsatakip.v5.data
 
@@ -102,10 +104,14 @@ jobs:
           }
           KOTLIN
 
+          test "$(git hash-object "$SRC_ROOT/data/BackendPreflightClient.kt")" = '7d677c617e621138f86b686f937f438e1bac6f38'
+          test "$(git hash-object "$SRC_ROOT/data/ProviderReadinessService.kt")" = '63336939cabf527ff4070fabcc8080e843d142a3'
+
           python - <<'PY'
           from pathlib import Path
 
           root = Path('base-v5/android/app/src/main/java/tr/borsatakip/v5')
+
           settings = root / 'data/SettingsStore.kt'
           lines = settings.read_text().splitlines()
           starts = [i for i, line in enumerate(lines) if line.strip() == 'companion object {']
@@ -136,8 +142,39 @@ jobs:
               if body.count(old) != 1:
                   raise SystemExit(f'{rel}: expected exactly one UI scope pattern')
               path.write_text(body.replace(old, new, 1))
+
+          def replace_https_validator(rel, signature):
+              path = root / rel
+              src = path.read_text().splitlines()
+              starts = [i for i, line in enumerate(src) if line.strip() == signature]
+              if len(starts) != 1:
+                  raise SystemExit(f'{rel}: expected one {signature}, got {len(starts)}')
+              start = starts[0]
+              ends = [i for i in range(start, min(len(src), start + 30)) if src[i].strip() == '}.getOrDefault(false)']
+              if len(ends) != 1:
+                  raise SystemExit(f'{rel}: validator end not found')
+              end = ends[0]
+              fun_name = 'validHttps' if 'validHttps' in signature else 'isValidHttps'
+              replacement = [
+                  f'        fun {fun_name}(raw: String): Boolean = runCatching {{',
+                  '            val uri = URI(raw.trim())',
+                  '            val host = uri.host?.trim()?.lowercase()?.removePrefix("[")?.removeSuffix("]").orEmpty()',
+                  '            uri.scheme.equals("https", ignoreCase = true) &&',
+                  '                host.isNotBlank() &&',
+                  '                uri.userInfo == null &&',
+                  '                uri.fragment == null &&',
+                  '                uri.rawQuery == null &&',
+                  '                host != "localhost" && !host.endsWith(".localhost") &&',
+                  '                host !in setOf("127.0.0.1", "0.0.0.0", "::1", "10.0.2.2")',
+                  '        }.getOrDefault(false)',
+              ]
+              path.write_text('\n'.join(src[:start] + replacement + src[end + 1:]) + '\n')
+
+          replace_https_validator('data/BackendPreflightClient.kt', 'fun validHttps(raw: String): Boolean = runCatching {')
+          replace_https_validator('data/ProviderReadinessService.kt', 'fun isValidHttps(raw: String): Boolean = runCatching {')
           PY
 
+          # The R3 source removes BackendUrlPolicy; keep the inherited V5 unit test on current validators.
           cat > "$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt" <<'KOTLIN'
           package tr.borsatakip.v5.data
 
@@ -170,6 +207,8 @@ jobs:
           KOTLIN
 
           test "$(git hash-object "$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5/data/BackendUrlPolicyTest.kt")" = '8d2aa5c7994ad1550f87a1726369e019433fd3b7'
+          test "$(git hash-object "$SRC_ROOT/data/BackendPreflightClient.kt")" = '2593f6b14ee33ff0a1f3e0309f519d388fed6411'
+          test "$(git hash-object "$SRC_ROOT/data/ProviderReadinessService.kt")" = '6bbc9d98c6befde6152e8a83c876994db11ca4b0'
           test "$(git hash-object "$SRC_ROOT/data/SessionRefreshGate.kt")" = '97aff01ee90011db6fcd82f27e4730060c2f2cc1'
           test "$(git hash-object "$SRC_ROOT/data/SettingsStore.kt")" = '199a3c8075e2d6d8a9ca543485ad822cade8c6f8'
           test "$(git hash-object "$SRC_ROOT/research/ResearchModels.kt")" = 'f8e1e965936659f7822bbc558ed9aab434bd6b4b'
