@@ -77,10 +77,10 @@ jobs:
           sha_check "$SRC/research/ResearchModels.kt" 'f8e1e965936659f7822bbc558ed9aab434bd6b4b'
           sha_check "$SRC/ui/BistScanActivity.kt" 'bb44655d5a665f359af06e8746b9f8e4b361d31c'
           sha_check "$SRC/ui/OpportunityActivity.kt" '35c5113ec523c1b836b49e0427ee7e51e7103528'
-          sha_check "$SRC/ui/StocksActivity.kt" 'd37ec28dbbc4839c009b955ea97ce2d728106991'
+          sha_check "$SRC/ui/StocksActivity.kt" '485b66950312ffb599bcf0a581aafd5126fb0770'
           sha_check "$SRC/ui/StocksCompactAdapter.kt" 'ef1abd8d30305097ef8fa0b2027d7f6d65f3b756'
           sha_check "$SRC/ui/ViopActivity.kt" 'ea2c17aaca64c3eb035c0a761de7be687dfaa04d'
-          sha_check "$XML" '302bd4397ab5d81e3f5521f3ad54e3656cde145b'
+          sha_check "$XML" 'b015a3c4b8bf458290d86660862f0fd6685cca2d'
           test "$SHA_FAIL" -eq 0
           ! grep -R -F 'takeIf { it.size >= 2 }?.get(it.lastIndex - 1)' "$SRC/ui"
           grep -Fq 'showUnavailableSummary("Veri bekleniyor")' "$SRC/ui/ViopActivity.kt"
