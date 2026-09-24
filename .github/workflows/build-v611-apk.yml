@@ -73,6 +73,107 @@ jobs:
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
           echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay' >> "$GITHUB_ENV"
 
+      - name: Apply V6.1.1 compile fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
+          SRC_ROOT="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
+
+          git -C "$GITHUB_WORKSPACE/base-v5" show HEAD:android/app/src/main/java/tr/borsatakip/v5/research/ResearchModels.kt \
+            > "$SRC_ROOT/research/ResearchModels.kt"
+
+          cat > "$SRC_ROOT/data/SessionRefreshGate.kt" <<'KOTLIN'
+          package tr.borsatakip.v5.data
+
+          import kotlinx.coroutines.sync.Mutex
+          import kotlinx.coroutines.sync.withLock
+
+          /** Process-wide refresh single-flight primitive. */
+          class SessionRefreshGate {
+              private val mutex = Mutex()
+
+              suspend fun run(
+                  isSatisfied: () -> Boolean,
+                  refresh: suspend () -> Boolean
+              ): Boolean = mutex.withLock {
+                  if (isSatisfied()) true else refresh()
+              }
+          }
+          KOTLIN
+
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('base-v5/android/app/src/main/java/tr/borsatakip/v5')
+
+          settings = root / 'data/SettingsStore.kt'
+          text = settings.read_text()
+          first = '''    companion object {
+              /** Renew early enough that a request cannot start with a token about to expire. */
+              const val BACKEND_SESSION_RENEW_WINDOW_MS = 60_000L
+          }'''
+          merged = '''    companion object {
+              /** Renew early enough that a request cannot start with a token about to expire. */
+              const val BACKEND_SESSION_RENEW_WINDOW_MS = 60_000L
+              private const val KEY_ALIAS = "borsa_takip_api_key"
+              private const val IV_SIZE = 12
+
+              internal fun isRetiredBackendUrl(
+                  url: String,
+                  retiredHosts: Set<String> = BuildConfig.RETIRED_BACKEND_HOSTS
+                      .split(';')
+                      .map { it.trim().lowercase() }
+                      .filter { it.isNotBlank() }
+                      .toSet()
+              ): Boolean {
+                  val host = runCatching { URI(url.trim()).host?.lowercase().orEmpty() }.getOrDefault("")
+                  return host.isNotBlank() && host in retiredHosts
+              }
+          }'''
+          second = '''
+              companion object {
+                  private const val KEY_ALIAS = "borsa_takip_api_key"
+                  private const val IV_SIZE = 12
+
+                  internal fun isRetiredBackendUrl(
+                      url: String,
+                      retiredHosts: Set<String> = BuildConfig.RETIRED_BACKEND_HOSTS
+                          .split(';')
+                          .map { it.trim().lowercase() }
+                          .filter { it.isNotBlank() }
+                          .toSet()
+                  ): Boolean {
+                      val host = runCatching { URI(url.trim()).host?.lowercase().orEmpty() }.getOrDefault("")
+                      return host.isNotBlank() && host in retiredHosts
+                  }
+              }
+          '''
+          if text.count(first) != 1 or text.count(second) != 1:
+              raise SystemExit('SettingsStore compile-fix source pattern mismatch')
+          text = text.replace(first, merged, 1).replace(second, '\n', 1)
+          settings.write_text(text)
+
+          old = 'stock?.candles?.takeIf { it.size >= 2 }?.get(it.lastIndex - 1)?.close'
+          new = 'stock?.candles?.takeIf { it.size >= 2 }?.let { it[it.lastIndex - 1].close }'
+          for rel in ('ui/BistScanActivity.kt', 'ui/OpportunityActivity.kt', 'ui/ViopActivity.kt'):
+              path = root / rel
+              body = path.read_text()
+              if body.count(old) != 1:
+                  raise SystemExit(f'{rel}: expected exactly one UI scope pattern')
+              path.write_text(body.replace(old, new, 1))
+          PY
+
+          test "$(git hash-object "$SRC_ROOT/data/SessionRefreshGate.kt")" = '97aff01ee90011db6fcd82f27e4730060c2f2cc1'
+          test "$(git hash-object "$SRC_ROOT/data/SettingsStore.kt")" = '199a3c8075e2d6d8a9ca543485ad822cade8c6f8'
+          test "$(git hash-object "$SRC_ROOT/research/ResearchModels.kt")" = 'f8e1e965936659f7822bbc558ed9aab434bd6b4b'
+          test "$(git hash-object "$SRC_ROOT/ui/BistScanActivity.kt")" = 'bb44655d5a665f359af06e8746b9f8e4b361d31c'
+          test "$(git hash-object "$SRC_ROOT/ui/OpportunityActivity.kt")" = '35c5113ec523c1b836b49e0427ee7e51e7103528'
+          test "$(git hash-object "$SRC_ROOT/ui/ViopActivity.kt")" = '4023bf607f95e85b625f9915944dafab234b9c75'
+          test "$(grep -c 'companion object' "$SRC_ROOT/data/SettingsStore.kt")" -eq 1
+          ! grep -R -F 'takeIf { it.size >= 2 }?.get(it.lastIndex - 1)' "$SRC_ROOT/ui"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + compile fixes' >> "$GITHUB_ENV"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
