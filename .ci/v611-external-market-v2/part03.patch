@@ -1,0 +1,217 @@
+--- a/app/src/main/java/tr/borsatakip/v5/ui/MarketInstrumentDetailActivity.kt
++++ b/app/src/main/java/tr/borsatakip/v5/ui/MarketInstrumentDetailActivity.kt
+@@ -11,6 +11,7 @@
+ import tr.borsatakip.v5.R
+ import tr.borsatakip.v5.data.BackendProvider
+ import tr.borsatakip.v5.data.BistIndexDataService
++import tr.borsatakip.v5.data.ExternalMarketQuoteService
+ import tr.borsatakip.v5.data.ProviderRouter
+ import tr.borsatakip.v5.data.SettingsStore
+ import tr.borsatakip.v5.data.ViopContractSelector
+@@ -31,19 +32,19 @@
+         setContentView(R.layout.activity_market_instrument_detail)
+         setupBottomNav()
+         instrument = intent.getStringExtra(EXTRA_INSTRUMENT).orEmpty().uppercase(Locale.ROOT)
+-        findViewById<Button>(R.id.marketDetailRefresh).setOnClickListener { load() }
++        findViewById<Button>(R.id.marketDetailRefresh).setOnClickListener { load(forceExternalRefresh = true) }
+         findViewById<Button>(R.id.marketDetailSettings).setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+         load()
+     }
+ 
+-    private fun load() {
++    private fun load(forceExternalRefresh: Boolean = false) {
+         setLoading()
+         lifecycleScope.launch {
+             when (instrument) {
+                 "BIST100" -> loadStock("BIST 100", "XU100", listOf("XU100.IS", "^XU100"))
+                 "BIST30" -> loadStock("BIST 30", "XU030", listOf("XU030.IS", "^XU030", "XU030"))
+-                "USDTRY" -> loadExternal("DOLAR / TL", "USDTRY", listOf("TRY=X"))
+-                "XAUUSD" -> loadExternal("ONS ALTIN", "XAUUSD", listOf("XAUUSD=X", "GC=F"))
++                "USDTRY" -> loadExternal("DOLAR / TL", "USDTRY", listOf("TRY=X"), forceExternalRefresh)
++                "XAUUSD" -> loadExternal("ONS ALTIN", "XAUUSD", listOf("XAUUSD=X", "GC=F"), forceExternalRefresh)
+                 "VIOP30" -> loadViop30()
+                 else -> showError("Bilinmeyen piyasa kartı")
+             }
+@@ -55,10 +56,10 @@
+         if (stock == null) showError("$title verisi alınamadı. Production benchmark OHLCV doğrulanamadı.") else bindStock(title, stock)
+     }
+ 
+-    private suspend fun loadExternal(title: String, label: String, symbols: List<String>) {
+-        val result = ProviderRouter(this).fetchExternalQuote(label, symbols)
++    private suspend fun loadExternal(title: String, label: String, symbols: List<String>, forceRefresh: Boolean) {
++        val result = ExternalMarketQuoteService(this).load(label, symbols, forceRefresh = forceRefresh)
+         val stock = result.stock
+-        if (stock == null) showError("$title verisi alınamadı. ${result.error ?: ""}".trim()) else bindStock(title, stock)
++        if (stock == null) showExternalError(title, result) else bindExternalStock(title, label, stock, result)
+     }
+ 
+     private suspend fun loadViop30() {
+@@ -116,6 +117,62 @@
+         }
+     }
+ 
++    private fun bindExternalStock(title: String, label: String, stock: Stock, result: ExternalMarketQuoteService.Result) {
++        val price = stock.quotePrice ?: stock.candles.lastOrNull()?.close ?: run {
++            showExternalError(title, result)
++            return
++        }
++        val previous = stock.previousClose ?: stock.candles.dropLast(1).lastOrNull()?.close
++        val change = previous?.takeIf { it > 0.0 }?.let { ((price - it) / it) * 100.0 }
++        findViewById<TextView>(R.id.marketDetailTitle).text = title
++        findViewById<TextView>(R.id.marketDetailValue).text = fmt(price)
++        val changeView = findViewById<TextView>(R.id.marketDetailChange)
++        if (change == null || !change.isFinite()) {
++            changeView.text = "Değişim —"
++            changeView.setTextColor(getColor(R.color.text_secondary))
++        } else {
++            val up = change >= 0
++            changeView.text = "${if (up) "▲" else "▼"} ${String.format(trLocale, "%.2f%%", abs(change))}"
++            changeView.setTextColor(getColor(if (up) R.color.green else R.color.red))
++        }
++        val dataTime = if (stock.dataTimestamp > 0L) SimpleDateFormat("dd.MM.yyyy HH:mm:ss", trLocale).format(Date(stock.dataTimestamp)) else "—"
++        val attemptTime = SimpleDateFormat("HH:mm:ss", trLocale).format(Date(result.attemptedAt))
++        val stateLabel = if (result.isCached) "SON BAŞARILI VERİ • CANLI DEĞİL" else "YEDEK / GECİKMELİ"
++        findViewById<TextView>(R.id.marketDetailMeta).text = buildString {
++            append("Kaynak: ").append(stock.source).append('\n')
++            append("Durum: ").append(stateLabel).append('\n')
++            append("Veri zamanı: ").append(dataTime).append('\n')
++            append("Son deneme: ").append(attemptTime).append('\n')
++            append(result.primary.shortLabel("Birincil sağlayıcı")).append('\n')
++            append(result.fallback.shortLabel("Yedek sağlayıcı"))
++        }
++        findViewById<TextView>(R.id.marketDetailStats).text = buildString {
++            if (label == "USDTRY") append("Fiyat türü: Son / regular market price\n")
++            else append("Fiyat türü: USD/ons son piyasa fiyatı\n")
++            append("Önceki kapanış: ${previous?.let(::fmt) ?: "—"}\n")
++            append("Alış: ${stock.bid?.let(::fmt) ?: "sağlayıcı vermedi"}   •   Satış: ${stock.ask?.let(::fmt) ?: "sağlayıcı vermedi"}\n")
++            append("Para birimi: ${stock.currency ?: "—"}\n")
++            append(result.cache.shortLabel("Önbellek"))
++        }
++        findViewById<Button>(R.id.marketDetailSettings).visibility = View.VISIBLE
++    }
++
++    private fun showExternalError(title: String, result: ExternalMarketQuoteService.Result) {
++        findViewById<TextView>(R.id.marketDetailTitle).text = title
++        findViewById<TextView>(R.id.marketDetailValue).text = "—"
++        findViewById<TextView>(R.id.marketDetailChange).text = "VERİ YOK"
++        findViewById<TextView>(R.id.marketDetailChange).setTextColor(getColor(R.color.red))
++        val attemptTime = SimpleDateFormat("HH:mm:ss", trLocale).format(Date(result.attemptedAt))
++        findViewById<TextView>(R.id.marketDetailMeta).text = buildString {
++            append(result.primary.shortLabel("Birincil sağlayıcı")).append('\n')
++            append(result.fallback.shortLabel("Yedek sağlayıcı")).append('\n')
++            append(result.cache.shortLabel("Önbellek")).append('\n')
++            append("Son deneme: ").append(attemptTime)
++        }
++        findViewById<TextView>(R.id.marketDetailStats).text = "Gerçek veri alınamadı. Sahte, tahmini veya rastgele piyasa değeri gösterilmez. Teknik hata ayrıntısı EXTERNAL_MARKET logunda tutulur."
++        findViewById<Button>(R.id.marketDetailSettings).visibility = View.VISIBLE
++    }
++
+     private fun bindViop(title: String, quote: ViopQuote) {
+         bindCommon(title, quote.price, quote.dailyChangePct, quote.source, quote.exchangeTimestamp, quote.realtime, quote.delaySeconds)
+         findViewById<TextView>(R.id.marketDetailStats).text = buildString {
+--- a/app/src/main/java/tr/borsatakip/v5/ui/SettingsDetailActivity.kt
++++ b/app/src/main/java/tr/borsatakip/v5/ui/SettingsDetailActivity.kt
+@@ -126,7 +126,18 @@
+     private fun renderDataConnection() {
+         setHeader("Veri Bağlantısı", "Production Backend ve mevcut ProviderRouter bağlantısı")
+         val url = addEdit("Production Backend URL", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, settingsStore.baseUrl)
++        val fallbackMaster = addSwitch("Yedek sağlayıcıları etkinleştir", settingsStore.experimentalProvidersEnabled)
++        val yahooFallback = addSwitch("Yahoo Finance gecikmeli yedeğini kullan • BIST + DOLAR/TL + ONS ALTIN", settingsStore.yahooFallbackEnabled)
++        yahooFallback.isEnabled = fallbackMaster.isChecked
++        fallbackMaster.setOnCheckedChangeListener { _, enabled -> yahooFallback.isEnabled = enabled }
+         val status = addStatus(providerSummary())
++        addButton("YEDEK SAĞLAYICI AYARLARINI KAYDET") {
++            settingsStore.experimentalProvidersEnabled = fallbackMaster.isChecked
++            settingsStore.yahooFallbackEnabled = yahooFallback.isChecked
++            status.text = providerSummary()
++            setResult(RESULT_OK, Intent().putExtra(SettingsActivity.EXTRA_PROVIDER_CONFIG_CHANGED, true))
++            Toast.makeText(this, "Yedek sağlayıcı tercihi kaydedildi. Dış piyasa sorguları yeni tercihi kullanacak.", Toast.LENGTH_LONG).show()
++        }
+         addButton("KAYITLI BAĞLANTIYI TEST ET") { button ->
+             val typed = url.text.toString().trim().removeSuffix("/")
+             if (typed != settingsStore.baseUrl) {
+@@ -494,7 +505,14 @@
+ 
+     private fun providerSummary(): String {
+         val x = readiness.localConfigState()
+-        return "Provider: ${x.state}\nSon kontrol: ${formatTime(x.testedAt)}\nSon hata: ${x.failureCode}\n${x.message}"
++        return buildString {
++            append("Provider: ${x.state}\n")
++            append("Son kontrol: ${formatTime(x.testedAt)}\n")
++            append("Son hata: ${x.failureCode}\n")
++            append("Yedek sağlayıcılar: ${if (settingsStore.experimentalProvidersEnabled) "AÇIK" else "KAPALI"}\n")
++            append("Yahoo gecikmeli yedek: ${if (settingsStore.yahooFallbackEnabled) "AÇIK" else "KAPALI"}\n")
++            append(x.message)
++        }
+     }
+ 
+     private fun notificationPermissionGranted(): Boolean =
+--- a/app/src/main/java/tr/borsatakip/v5/ui/ViopActivity.kt
++++ b/app/src/main/java/tr/borsatakip/v5/ui/ViopActivity.kt
+@@ -14,6 +14,7 @@
+ import androidx.recyclerview.widget.LinearLayoutManager
+ import androidx.recyclerview.widget.RecyclerView
+ import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.async
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.launch
+@@ -25,6 +26,7 @@
+ import tr.borsatakip.v5.analysis.ViopUnderlyingScanner
+ import tr.borsatakip.v5.data.BackendProvider
+ import tr.borsatakip.v5.data.BistIndexDataService
++import tr.borsatakip.v5.data.ExternalMarketQuoteService
+ import tr.borsatakip.v5.data.MarketDataQuality
+ import tr.borsatakip.v5.data.ProviderReadinessService
+ import tr.borsatakip.v5.data.ProviderRouter
+@@ -122,20 +124,41 @@
+ 
+     private fun refreshUnderlyingMarketCards() {
+         lifecycleScope.launch {
+-            val stocks = withContext(Dispatchers.IO) {
+-                BistIndexDataService(this@ViopActivity).loadMany(listOf("XU030", "XU100"))
+-            }
++            val external = ExternalMarketQuoteService(this@ViopActivity)
++            val stocksDeferred = async(Dispatchers.IO) { BistIndexDataService(this@ViopActivity).loadMany(listOf("XU030", "XU100")) }
++            val usdDeferred = async(Dispatchers.IO) { external.load("USDTRY", listOf("TRY=X")) }
++            val goldDeferred = async(Dispatchers.IO) { external.load("XAUUSD", listOf("XAUUSD=X", "GC=F")) }
++            val stocks = stocksDeferred.await()
+             bindUnderlyingIndex(stocks["XU030"], R.id.viopUnderlyingBist30Value, R.id.viopUnderlyingBist30Change, R.id.viopUnderlyingBist30Chart)
+             bindUnderlyingIndex(stocks["XU100"], R.id.viopUnderlyingBist100Value, R.id.viopUnderlyingBist100Change, R.id.viopUnderlyingBist100Chart)
+-            // DOLAR/TL ve ALTIN için bu kaynak sürümünde doğrulanmış provider capability yok.
+-            // Kartlar veri uydurmak yerine açıkça kullanılabilir veri olmadığını gösterir.
+-            findViewById<TextView>(R.id.viopUnderlyingUsdTryValue).text = "—"
+-            findViewById<TextView>(R.id.viopUnderlyingUsdTryStatus).text = "Doğrulanmış kaynak yok"
+-            findViewById<TextView>(R.id.viopUnderlyingGoldValue).text = "—"
+-            findViewById<TextView>(R.id.viopUnderlyingGoldStatus).text = "Doğrulanmış kaynak yok"
++            bindUnderlyingExternal(usdDeferred.await(), R.id.viopUnderlyingUsdTryValue, R.id.viopUnderlyingUsdTryStatus)
++            bindUnderlyingExternal(goldDeferred.await(), R.id.viopUnderlyingGoldValue, R.id.viopUnderlyingGoldStatus)
+         }
+     }
+ 
++    private fun bindUnderlyingExternal(result: ExternalMarketQuoteService.Result, valueId: Int, statusId: Int) {
++        val value = findViewById<TextView>(valueId)
++        val statusView = findViewById<TextView>(statusId)
++        val stock = result.stock
++        val price = stock?.quotePrice ?: stock?.candles?.lastOrNull()?.close
++        if (stock == null || price == null || !price.isFinite() || price <= 0.0) {
++            value.text = "—"
++            statusView.text = "${result.primary.shortLabel("Birincil")}\n${result.fallback.shortLabel("Yedek")}"
++            statusView.setTextColor(getColor(R.color.text_secondary))
++            return
++        }
++        value.text = if (price >= 1000.0) "%,.2f".format(Locale.getDefault(), price) else "%.2f".format(Locale.getDefault(), price)
++        val previous = stock.previousClose
++        val pct = previous?.takeIf { it.isFinite() && it > 0.0 }?.let { ((price / it) - 1.0) * 100.0 }
++        val time = if (stock.dataTimestamp > 0L) SimpleDateFormat("HH:mm", Locale("tr", "TR")).format(Date(stock.dataTimestamp)) else "—"
++        statusView.text = when {
++            result.isCached -> "SON BAŞARILI • $time\nCANLI DEĞİL"
++            pct != null -> "${if (pct >= 0.0) "+" else ""}${"%.2f".format(Locale.US, pct)}% • YEDEK\n$time"
++            else -> "YEDEK / GECİKMELİ\n$time"
++        }
++        statusView.setTextColor(getColor(if (result.isCached) R.color.text_secondary else if ((pct ?: 0.0) >= 0.0) R.color.green else R.color.red))
++    }
++
+     private fun bindUnderlyingIndex(stock: Stock?, valueId: Int, changeId: Int, chartId: Int) {
+         val value = findViewById<TextView>(valueId)
+         val change = findViewById<TextView>(changeId)
