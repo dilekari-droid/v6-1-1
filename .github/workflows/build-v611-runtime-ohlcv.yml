@@ -176,19 +176,27 @@ jobs:
           grep -Fq 'LONG SİNYALİ BULUNAMADI' "$SRC/ui/ScanResultsActivity.kt"
           grep -Fq 'SHORT SİNYALİ BULUNAMADI' "$SRC/ui/ScanResultsActivity.kt"
 
-          # External-market fail-closed/fallback/cache source gates.
-          test "$(git hash-object "$SRC/data/ExternalMarketQuotePolicy.kt")" = 'c909a09877dc15bc943b156e4343798e5813a6f6'
-          test "$(git hash-object "$SRC/data/ExternalMarketQuoteService.kt")" = 'b768444b84296825bce4dd7a1ebb8c8d44c6bc3e'
-          test "$(git hash-object "$SRC/data/MarketDataCache.kt")" = '560d85468ba008fa81b68f6f96cd31f8d3e5bb83'
-          test "$(git hash-object "$SRC/data/SettingsStore.kt")" = '9e1c821b783a3dd67268d250143e5ed3fca0f271'
-          test "$(git hash-object "$SRC/data/YahooFallbackProvider.kt")" = '6ffb8dc198fdd4c14bdcf09545e28868265b01b0'
-          test "$(git hash-object "$SRC/ui/MainActivity.kt")" = 'e07b89b289ad191a410ae782931174ba06e72024'
-          test "$(git hash-object "$SRC/ui/MarketInstrumentDetailActivity.kt")" = '2c4ca788b58ad93064ef0448825ddfb34e16f61b'
-          test "$(git hash-object "$SRC/ui/SettingsActivity.kt")" = 'e89ad98f06aa4b28bab0a409ef76f117a5e27486'
-          test "$(git hash-object "$SRC/ui/SettingsDetailActivity.kt")" = 'a675394b1f02a2b3df79bd5517f000121f566c2e'
-          test "$(git hash-object "$SRC/ui/ViopActivity.kt")" = 'f87b480fd1ce0aa237e7dd0223a239eb61aef5cc'
-          test "$(git hash-object "$STRINGS")" = '1230b0a1cbb3ffc0999a210a352991656735c6b5'
-          test "$(git hash-object "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt")" = 'a973fa399713da92853402e8268dbb1f5fc34e56'
+          # External-market fail-closed/fallback/cache source gates. Echo every actual SHA for diagnostics.
+          EXT_SHA_FAIL=0
+          ext_sha_check() {
+            local path="$1" expected="$2" actual
+            actual="$(git hash-object "$path")"
+            echo "EXT_SHA_CHECK path=$path actual=$actual expected=$expected"
+            if [ "$actual" != "$expected" ]; then EXT_SHA_FAIL=1; fi
+          }
+          ext_sha_check "$SRC/data/ExternalMarketQuotePolicy.kt" 'c909a09877dc15bc943b156e4343798e5813a6f6'
+          ext_sha_check "$SRC/data/ExternalMarketQuoteService.kt" 'b768444b84296825bce4dd7a1ebb8c8d44c6bc3e'
+          ext_sha_check "$SRC/data/MarketDataCache.kt" '560d85468ba008fa81b68f6f96cd31f8d3e5bb83'
+          ext_sha_check "$SRC/data/SettingsStore.kt" '9e1c821b783a3dd67268d250143e5ed3fca0f271'
+          ext_sha_check "$SRC/data/YahooFallbackProvider.kt" '6ffb8dc198fdd4c14bdcf09545e28868265b01b0'
+          ext_sha_check "$SRC/ui/MainActivity.kt" 'e07b89b289ad191a410ae782931174ba06e72024'
+          ext_sha_check "$SRC/ui/MarketInstrumentDetailActivity.kt" '2c4ca788b58ad93064ef0448825ddfb34e16f61b'
+          ext_sha_check "$SRC/ui/SettingsActivity.kt" 'e89ad98f06aa4b28bab0a409ef76f117a5e27486'
+          ext_sha_check "$SRC/ui/SettingsDetailActivity.kt" 'a675394b1f02a2b3df79bd5517f000121f566c2e'
+          ext_sha_check "$SRC/ui/ViopActivity.kt" 'f87b480fd1ce0aa237e7dd0223a239eb61aef5cc'
+          ext_sha_check "$STRINGS" '1230b0a1cbb3ffc0999a210a352991656735c6b5'
+          ext_sha_check "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt" 'a973fa399713da92853402e8268dbb1f5fc34e56'
+          test "$EXT_SHA_FAIL" -eq 0
           grep -Fq 'class ExternalMarketQuoteService' "$SRC/data/ExternalMarketQuoteService.kt"
           grep -Fq 'sourceMode = "CACHE"' "$SRC/data/ExternalMarketQuoteService.kt"
           grep -Fq 'REQUEST_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
