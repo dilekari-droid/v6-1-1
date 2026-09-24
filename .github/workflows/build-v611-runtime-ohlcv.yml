@@ -6,8 +6,7 @@ on:
     paths:
       - '.ci/v611-runtime-ohlcv-v611/**'
       - '.ci/v611-runtime-network-resilience.py'
-      - '.ci/v611-external-market-fallback/**'
-      - '.ci/v611-filter-ui-responsive.py'
+      - '.ci/v611-external-market-v2/**'
       - '.ci/v611-uiux-v6-fixes.py'
       - '.ci/v611-uiux-v6-copy-fixes.py'
       - '.ci/v611-uiux-v6-favorites-failclosed.py'
@@ -96,8 +95,6 @@ jobs:
           xz --test /tmp/v611-runtime-ohlcv.tar.xz
           tar -xJf /tmp/v611-runtime-ohlcv.tar.xz -C "$ANDROID_DIR"
 
-          # Runtime StockDetail carries the new OHLCV diagnostics. Re-apply the two
-          # proven fail-closed UI rules that are intentionally layered after it.
           python - <<'PY'
           from pathlib import Path
           import os
@@ -120,20 +117,37 @@ jobs:
 
           python "$GITHUB_WORKSPACE/.ci/v611-runtime-network-resilience.py" "$ANDROID_DIR"
 
-          # Reconstruct verified ONS ALTIN / DOLAR-TL external-market patch.
-          EXT_ROOT="$GITHUB_WORKSPACE/.ci/v611-external-market-fallback"
-          : > /tmp/v611-external-market.b64
-          for n in 00 01 02 03 04 05 06; do
-            part="$EXT_ROOT/part${n}.b64"
+          EXT_V2_ROOT="$GITHUB_WORKSPACE/.ci/v611-external-market-v2"
+          EXT_V2_PATCH=/tmp/v611-external-market-v2.patch
+          : > "$EXT_V2_PATCH"
+          for n in 00 01 02 03 04; do
+            part="$EXT_V2_ROOT/part${n}.patch"
             test -s "$part"
-            cat "$part" >> /tmp/v611-external-market.b64
+            cat "$part" >> "$EXT_V2_PATCH"
           done
-          test "$(wc -c < /tmp/v611-external-market.b64)" -eq 41488
-          base64 -d /tmp/v611-external-market.b64 > /tmp/v611-external-market-fallback.py
-          echo '0d228a161b0638a6818c81bfbaa26f5f493e9df2421c1c920d296b8360b2925f  /tmp/v611-external-market-fallback.py' | sha256sum -c -
-          python -m py_compile /tmp/v611-external-market-fallback.py
-          python /tmp/v611-external-market-fallback.py "$ANDROID_DIR"
-          python "$GITHUB_WORKSPACE/.ci/v611-filter-ui-responsive.py" "$ANDROID_DIR"
+          test "$(wc -c < "$EXT_V2_PATCH")" -eq 50237
+          echo 'aeb8ae7309e206a9b9b8d4ad5deb0a399b8497d234a0886ba5bc1c7905e118f7  /tmp/v611-external-market-v2.patch' | sha256sum -c -
+          (cd "$ANDROID_DIR" && patch --dry-run -p1 < "$EXT_V2_PATCH")
+          (cd "$ANDROID_DIR" && patch -p1 < "$EXT_V2_PATCH")
+
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ['ANDROID_DIR']) / 'app/src/main/res/values/strings.xml'
+          s = p.read_text()
+          replacements = {
+              '>LONG<': '>↗ LONG<',
+              '>SHORT<': '>↘ SHORT<',
+              '>85+ GÜÇLÜ<': '>85+ TEKNİK<',
+              '>SKORA GÖRE<': '>TEKNİK PUAN<',
+          }
+          for old, new in replacements.items():
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'filter string pattern count={count} pattern={old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
 
           SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
           TESTSRC="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5"
@@ -183,47 +197,51 @@ jobs:
           grep -Fq 'android:autoSizeMinTextSize="7sp"' "$FILTER_LAYOUT"
           grep -Fq 'selected -> R.color.white' "$SRC/ui/ScanResultsActivity.kt"
           test "$(git hash-object "$SRC/ui/ScanResultsActivity.kt")" = '14bedb30b021740c4510e6087a6c2990584843df'
-          test "$(git hash-object "$FILTER_LAYOUT")" = 'b76a46bee0aa459044174ad4fbdfde02e71bac70'
+          test "$(git hash-object "$FILTER_LAYOUT")" = '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
 
-          # External-market fail-closed/fallback/cache source gates. Echo every actual SHA for diagnostics.
           EXT_SHA_FAIL=0
           ext_sha_check() {
             local path="$1" expected="$2" actual
             actual="$(git hash-object "$path")"
-            echo "EXT_SHA_CHECK path=$path actual=$actual expected=$expected"
+            echo "EXT_V2_SHA_CHECK path=$path actual=$actual expected=$expected"
             if [ "$actual" != "$expected" ]; then EXT_SHA_FAIL=1; fi
           }
-          ext_sha_check "$SRC/data/ExternalMarketQuotePolicy.kt" 'c909a09877dc15bc943b156e4343798e5813a6f6'
-          ext_sha_check "$SRC/data/ExternalMarketQuoteService.kt" 'b768444b84296825bce4dd7a1ebb8c8d44c6bc3e'
-          ext_sha_check "$SRC/data/MarketDataCache.kt" '560d85468ba008fa81b68f6f96cd31f8d3e5bb83'
-          ext_sha_check "$SRC/data/SettingsStore.kt" 'd289657dfe4f4cbc297e7716adc1aea910f6ae70'
-          ext_sha_check "$SRC/data/YahooFallbackProvider.kt" '6ffb8dc198fdd4c14bdcf09545e28868265b01b0'
-          ext_sha_check "$SRC/ui/MainActivity.kt" 'e07b89b289ad191a410ae782931174ba06e72024'
-          ext_sha_check "$SRC/ui/MarketInstrumentDetailActivity.kt" '2c4ca788b58ad93064ef0448825ddfb34e16f61b'
-          ext_sha_check "$SRC/ui/SettingsActivity.kt" 'a391d04dec22686fddc4ec321fd63c7b977c8af9'
-          ext_sha_check "$SRC/ui/SettingsDetailActivity.kt" 'a675394b1f02a2b3df79bd5517f000121f566c2e'
-          ext_sha_check "$SRC/ui/ViopActivity.kt" '17ae86736b2e6c5db17b72738d70263095ecb852'
-          ext_sha_check "$STRINGS" '1230b0a1cbb3ffc0999a210a352991656735c6b5'
-          ext_sha_check "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt" 'a973fa399713da92853402e8268dbb1f5fc34e56'
+          ext_sha_check "$SRC/data/ExternalMarketQuoteLog.kt" 'aa9b1e65ab2d0cbb07c6f7201d0ebfb4cbda46b2'
+          ext_sha_check "$SRC/data/ExternalMarketQuotePolicy.kt" '3f2a7550652e8ce78917f7ee4674550028910b83'
+          ext_sha_check "$SRC/data/ExternalMarketQuoteService.kt" '87c29851c1cc6e21a6942a92672272ff8b3154cd'
+          ext_sha_check "$SRC/data/YahooFallbackProvider.kt" '9c5f9a4a6ea57d7c3dfb81b898426c753f7a829b'
+          ext_sha_check "$SRC/ui/MainActivity.kt" 'f57d10607b06d2d62d5c807050750da0f33fb937'
+          ext_sha_check "$SRC/ui/MarketInstrumentDetailActivity.kt" '7d0e45d3196df78f0997ecb941a3830bc2e5a218'
+          ext_sha_check "$SRC/ui/SettingsDetailActivity.kt" '150dfe18c85163a1238c2b5cb7860585e5aee334'
+          ext_sha_check "$SRC/ui/ViopActivity.kt" '274c16abf7fa1feb80d2e734c0b1e95558754c2d'
+          ext_sha_check "$FILTER_LAYOUT" '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
+          ext_sha_check "$STRINGS" 'aede467ab21340779ad1086cc6d1e6b580692248'
+          ext_sha_check "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt" 'c744fed261a5d421177d56356bee0d53985061fd'
           test "$EXT_SHA_FAIL" -eq 0
+
           grep -Fq 'class ExternalMarketQuoteService' "$SRC/data/ExternalMarketQuoteService.kt"
-          grep -Fq 'sourceMode = "CACHE"' "$SRC/data/ExternalMarketQuoteService.kt"
-          grep -Fq 'REQUEST_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
-          grep -Fq 'CAPABILITY_TTL_MS = 60_000L' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'StageState' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'SourceKind' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'MEMO_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'CAPABILITY_MEMO_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
           grep -Fq 'fallbackMaster.isChecked' "$SRC/ui/SettingsDetailActivity.kt"
           grep -Fq 'yahooFallback.isChecked' "$SRC/ui/SettingsDetailActivity.kt"
           grep -Fq 'forceRefresh = true' "$SRC/ui/MarketInstrumentDetailActivity.kt"
           grep -Fq 'SON BAŞARILI VERİ' "$SRC/ui/MarketInstrumentDetailActivity.kt"
-          grep -Fq 'Birincil sağlayıcı:' "$SRC/ui/MarketInstrumentDetailActivity.kt"
-          grep -Fq 'Yedek sağlayıcı:' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'Birincil sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'Yedek sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
           grep -Fq 'ExternalMarketQuoteService(this)' "$SRC/ui/MainActivity.kt"
           grep -Fq 'ExternalMarketQuoteService(this@ViopActivity)' "$SRC/ui/ViopActivity.kt"
           grep -Fq 'TRY=X' "$SRC/ui/ViopActivity.kt"
           grep -Fq 'XAUUSD=X' "$SRC/ui/ViopActivity.kt"
           grep -Fq 'GC=F' "$SRC/ui/ViopActivity.kt"
           ! grep -Fq 'Doğrulanmış kaynak yok' "$SRC/ui/ViopActivity.kt"
+          grep -Fq '↗ LONG' "$STRINGS"
+          grep -Fq '↘ SHORT' "$STRINGS"
+          grep -Fq '85+ TEKNİK' "$STRINGS"
+          grep -Fq 'TEKNİK PUAN' "$STRINGS"
 
-          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + proven UIUX-V6 chain + runtime/OHLCV overlay 464da8f9 + network resilience 4d07a4c9 + external market fallback/cache 0d228a16 + responsive filter cbb570ce' >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + proven UIUX-V6 chain + runtime/OHLCV overlay 464da8f9 + network resilience 4d07a4c9 + external market V2 textual patch aeb8ae73' >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -251,18 +269,18 @@ jobs:
           APK="$(find "$ANDROID_DIR/app/build/outputs/apk/debug" -type f -name '*.apk' | head -1)"
           test -n "$APK"
           mkdir -p out
-          cp "$APK" out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-debug.apk
-          sha256sum out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-debug.apk.sha256
-          printf 'source=%s\n' "$SELECTED_SOURCE" | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-source.txt
+          cp "$APK" out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-debug.apk
+          sha256sum out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-debug.apk.sha256
+          printf 'source=%s\n' "$SELECTED_SOURCE" | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-source.txt
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-badging.txt
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-signature.txt
-          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-badging.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-signature.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-badging.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: V6.1.1-RUNTIME-OHLCV-EXTMARKET-APK
+          name: V6.1.1-RUNTIME-OHLCV-EXTMARKET-V2-APK
           path: out/*
           if-no-files-found: error
           retention-days: 30
