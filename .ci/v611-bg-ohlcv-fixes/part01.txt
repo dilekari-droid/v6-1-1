@@ -1,0 +1,64 @@
+cale
+
+/** Persistent bounded audit log for real foreground/background scan lifecycle events. */
+object ScanRuntimeLog {
+    const val FILE_NAME = "scan_runtime_events.log"
+    private const val TAG = "SCAN_RUNTIME"
+    private const val MAX_BYTES = 512_000L
+    private const val KEEP_LINES = 1_500
+    private val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+
+    @Synchronized
+    fun event(context: Context, event: String, detail: String = "") {
+        val cleanEvent = event.trim().replace(Regex("[^A-Z0-9_]+"), "_")
+        val cleanDetail = detail.replace('\n', ' ').trim()
+        val line = buildString {
+            append(formatter.format(Date()))
+            append(' ')
+            append(cleanEvent)
+            if (cleanDetail.isNotBlank()) { append(' '); append(cleanDetail) }
+        }
+        Log.i(TAG, line)
+        runCatching {
+            val file = File(context.applicationContext.filesDir, FILE_NAME)
+            if (file.isFile && file.length() > MAX_BYTES) {
+                val tail = file.readLines().takeLast(KEEP_LINES)
+                file.writeText(tail.joinToString("\n", postfix = if (tail.isEmpty()) "" else "\n"), Charsets.UTF_8)
+            }
+            file.appendText(line + "\n", Charsets.UTF_8)
+        }.onFailure { Log.w(TAG, "scan log write failed: ${it.message}") }
+    }
+
+    @Synchronized
+    fun tail(context: Context, maxLines: Int = 200): List<String> {
+        val file = File(context.applicationContext.filesDir, FILE_NAME)
+        if (!file.isFile) return emptyList()
+        return runCatching { file.readLines().takeLast(maxLines.coerceIn(1, KEEP_LINES)) }.getOrDefault(emptyList())
+    }
+}
+''')
+
+screen_monitor = main_java / 'worker/ScanScreenStateMonitor.kt'
+write(screen_monitor, '''package tr.borsatakip.v5.worker\n\nimport android.content.BroadcastReceiver\nimport android.content.Context\nimport android.content.Intent\nimport android.content.IntentFilter\nimport android.os.Build\nimport tr.borsatakip.v5.data.ScanRuntimeLog\n\n/** Dynamic receiver tied to an active foreground scan service. */\nclass ScanScreenStateMonitor(\n    private val context: Context,\n    private val source: String\n) {\n    private var receiver: BroadcastReceiver? = null\n\n    fun start() {\n        if (receiver != null) return\n        val r = object : BroadcastReceiver() {\n            override fun onReceive(context: Context?, intent: Intent?) {\n                when (intent?.action) {\n                    Intent.ACTION_SCREEN_OFF -> ScanRuntimeLog.event(this@ScanScreenStateMonitor.context, "SCAN_SCREEN_LOCKED", "source=$source")\n                    Intent.ACTION_SCREEN_ON -> ScanRuntimeLog.event(this@ScanScreenStateMonitor.context, "SCAN_SCREEN_UNLOCKED", "source=$source")\n                }\n            }\n        }\n        val filter = IntentFilter().apply {\n            addAction(Intent.ACTION_SCREEN_OFF)\n            addAction(Intent.ACTION_SCREEN_ON)\n        }\n        if (Build.VERSION.SDK_INT >= 33) {\n            context.registerReceiver(r, filter, Context.RECEIVER_NOT_EXPORTED)\n        } else {\n            registerLegacy(r, filter)\n        }\n        receiver = r\n    }\n\n    @Suppress("DEPRECATION")\n    private fun registerLegacy(r: BroadcastReceiver, filter: IntentFilter) {\n        context.registerReceiver(r, filter)\n    }\n\n    fun stop() {\n        val r = receiver ?: return\n        runCatching { context.unregisterReceiver(r) }\n        receiver = null\n    }\n}\n''')
+
+# Bist manual FGS logs + screen monitor + best-effort redelivery.
+bist_service = main_java / 'worker/BistScanForegroundService.kt'
+replace_once(bist_service, 'import tr.borsatakip.v5.data.ScanTimeframe\n', 'import tr.borsatakip.v5.data.ScanTimeframe\nimport tr.borsatakip.v5.data.ScanRuntimeLog\n')
+replace_once(bist_service,
+'''    private var lastNotificationPhase = ""\n''',
+'''    private var lastNotificationPhase = ""\n    private lateinit var screenStateMonitor: ScanScreenStateMonitor\n    private var lastLoggedSymbol: String? = null\n''')
+replace_once(bist_service,
+'''        repository = ManualScanSessionRepository.get(this)\n        connectivity = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager\n''',
+'''        repository = ManualScanSessionRepository.get(this)\n        connectivity = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager\n        screenStateMonitor = ScanScreenStateMonitor(this, "MANUAL_BIST")\n        screenStateMonitor.start()\n        ScanRuntimeLog.event(this, "SCAN_SERVICE_STARTED", "source=MANUAL_BIST")\n''')
+replace_once(bist_service,
+'''                repository.markResumedFromPause()\n                updateForeground(repository.snapshot(), force = true)\n''',
+'''                repository.markResumedFromPause()\n                ScanRuntimeLog.event(this@BistScanForegroundService, "SCAN_RETRY", "reason=network_recovered")\n                updateForeground(repository.snapshot(), force = true)\n''')
+replace_once(bist_service,
+'''                repository.markPaused()\n                updateForeground(repository.snapshot(), force = true)\n''',
+'''                repository.markPaused()\n                ScanRuntimeLog.event(this@BistScanForegroundService, "DATA_FETCH_ERROR", "reason=network_lost")\n                updateForeground(repository.snapshot(), force = true)\n''')
+replace_once(bist_service,
+'''        // Manuel kullanıcı taraması OS tarafından öldürülürse kendiliğinden yeni tarama başlatılmaz.\n        return START_NOT_STICKY\n''',
+'''        // OS servis sürecini öldürürse kullanıcı tarafından başlatılan intent best-effort yeniden teslim edilir.\n        // Ekran kilidi normal durumda aynı coroutine/session üzerinde devam eder; yeniden teslim yalnız OS kesintisi içindir.\n        return START_REDELIVER_INTENT\n''')
+replace_once(bist_service,
+'''        repository.begin(timeframe.storedMinutes)\n        updateForeground(repository.snapshot(), force = true)\n''',
+'''   
