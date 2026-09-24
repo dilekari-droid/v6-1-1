@@ -80,9 +80,11 @@ jobs:
           ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
           SRC_ROOT="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
 
+          # R3 kept ResearchPolicies/NewsResearchAdapter but removed their model types.
           git -C "$GITHUB_WORKSPACE/base-v5" show HEAD:android/app/src/main/java/tr/borsatakip/v5/research/ResearchModels.kt \
             > "$SRC_ROOT/research/ResearchModels.kt"
 
+          # R3 BackendSessionClient depends on this new single-flight primitive.
           cat > "$SRC_ROOT/data/SessionRefreshGate.kt" <<'KOTLIN'
           package tr.borsatakip.v5.data
 
@@ -108,51 +110,26 @@ jobs:
           root = Path('base-v5/android/app/src/main/java/tr/borsatakip/v5')
 
           settings = root / 'data/SettingsStore.kt'
-          text = settings.read_text()
-          first = '''    companion object {
-              /** Renew early enough that a request cannot start with a token about to expire. */
-              const val BACKEND_SESSION_RENEW_WINDOW_MS = 60_000L
-          }'''
-          merged = '''    companion object {
-              /** Renew early enough that a request cannot start with a token about to expire. */
-              const val BACKEND_SESSION_RENEW_WINDOW_MS = 60_000L
-              private const val KEY_ALIAS = "borsa_takip_api_key"
-              private const val IV_SIZE = 12
+          lines = settings.read_text().splitlines()
+          starts = [i for i, line in enumerate(lines) if line.strip() == 'companion object {']
+          if len(starts) != 2:
+              raise SystemExit(f'SettingsStore expected 2 companion objects, got {len(starts)}')
 
-              internal fun isRetiredBackendUrl(
-                  url: String,
-                  retiredHosts: Set<String> = BuildConfig.RETIRED_BACKEND_HOSTS
-                      .split(';')
-                      .map { it.trim().lowercase() }
-                      .filter { it.isNotBlank() }
-                      .toSet()
-              ): Boolean {
-                  val host = runCatching { URI(url.trim()).host?.lowercase().orEmpty() }.getOrDefault("")
-                  return host.isNotBlank() && host in retiredHosts
-              }
-          }'''
-          second = '''
-              companion object {
-                  private const val KEY_ALIAS = "borsa_takip_api_key"
-                  private const val IV_SIZE = 12
+          def find_block_end(start):
+              depth = 0
+              for i in range(start, len(lines)):
+                  depth += lines[i].count('{') - lines[i].count('}')
+                  if depth == 0:
+                      return i
+              raise SystemExit('SettingsStore companion object is not closed')
 
-                  internal fun isRetiredBackendUrl(
-                      url: String,
-                      retiredHosts: Set<String> = BuildConfig.RETIRED_BACKEND_HOSTS
-                          .split(';')
-                          .map { it.trim().lowercase() }
-                          .filter { it.isNotBlank() }
-                          .toSet()
-                  ): Boolean {
-                      val host = runCatching { URI(url.trim()).host?.lowercase().orEmpty() }.getOrDefault("")
-                      return host.isNotBlank() && host in retiredHosts
-                  }
-              }
-          '''
-          if text.count(first) != 1 or text.count(second) != 1:
-              raise SystemExit('SettingsStore compile-fix source pattern mismatch')
-          text = text.replace(first, merged, 1).replace(second, '\n', 1)
-          settings.write_text(text)
+          first_start, second_start = starts
+          first_end = find_block_end(first_start)
+          second_end = find_block_end(second_start)
+          second_body = lines[second_start + 1:second_end]
+          lines = lines[:second_start] + lines[second_end + 1:]
+          lines = lines[:first_end] + second_body + lines[first_end:]
+          settings.write_text('\n'.join(lines) + '\n')
 
           old = 'stock?.candles?.takeIf { it.size >= 2 }?.get(it.lastIndex - 1)?.close'
           new = 'stock?.candles?.takeIf { it.size >= 2 }?.let { it[it.lastIndex - 1].close }'
