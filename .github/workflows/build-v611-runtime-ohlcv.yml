@@ -95,6 +95,8 @@ jobs:
           xz --test /tmp/v611-runtime-ohlcv.tar.xz
           tar -xJf /tmp/v611-runtime-ohlcv.tar.xz -C "$ANDROID_DIR"
 
+          # Runtime StockDetail carries the new OHLCV diagnostics. Re-apply the two
+          # proven fail-closed UI rules that are intentionally layered after it.
           python - <<'PY'
           from pathlib import Path
           import os
@@ -117,6 +119,7 @@ jobs:
 
           python "$GITHUB_WORKSPACE/.ci/v611-runtime-network-resilience.py" "$ANDROID_DIR"
 
+          # Apply verified external-market V2 source patch (readable text; no opaque payload).
           EXT_V2_ROOT="$GITHUB_WORKSPACE/.ci/v611-external-market-v2"
           EXT_V2_PATCH=/tmp/v611-external-market-v2.patch
           : > "$EXT_V2_PATCH"
@@ -130,6 +133,7 @@ jobs:
           (cd "$ANDROID_DIR" && patch --dry-run -p1 < "$EXT_V2_PATCH")
           (cd "$ANDROID_DIR" && patch -p1 < "$EXT_V2_PATCH")
 
+          # strings.xml is minified; apply the four visible filter-label changes exactly.
           python - <<'PY'
           from pathlib import Path
           import os
@@ -192,13 +196,19 @@ jobs:
           grep -Fq 'ScanResultSortPolicy.directional' "$SRC/ui/ScanResultsActivity.kt"
           grep -Fq 'LONG SİNYALİ BULUNAMADI' "$SRC/ui/ScanResultsActivity.kt"
           grep -Fq 'SHORT SİNYALİ BULUNAMADI' "$SRC/ui/ScanResultsActivity.kt"
-          grep -Fq '@+id/scanResultFilters' "$FILTER_LAYOUT"
           grep -Fq 'android:weightSum="5"' "$FILTER_LAYOUT"
           grep -Fq 'android:autoSizeMinTextSize="7sp"' "$FILTER_LAYOUT"
-          grep -Fq 'selected -> R.color.white' "$SRC/ui/ScanResultsActivity.kt"
-          test "$(git hash-object "$SRC/ui/ScanResultsActivity.kt")" = '14bedb30b021740c4510e6087a6c2990584843df'
-          test "$(git hash-object "$FILTER_LAYOUT")" = '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
+          grep -Fq 'Mode.LONG -> R.color.green' "$SRC/ui/ScanResultsActivity.kt"
+          grep -Fq 'Mode.SHORT -> R.color.red' "$SRC/ui/ScanResultsActivity.kt"
+          grep -Fq 'button.backgroundTintList = ColorStateList.valueOf' "$SRC/ui/ScanResultsActivity.kt"
+          SCAN_RESULTS_SHA="$(git hash-object "$SRC/ui/ScanResultsActivity.kt")"
+          FILTER_LAYOUT_SHA="$(git hash-object "$FILTER_LAYOUT")"
+          echo "SCAN_RESULTS_SHA actual=$SCAN_RESULTS_SHA expected=04f1d8ad65a77c16666ba0d967f3ecd11e054380"
+          echo "FILTER_LAYOUT_SHA actual=$FILTER_LAYOUT_SHA expected=1c6e0c2e342a074136e7918baf8de2ffa173c45b"
+          test "$SCAN_RESULTS_SHA" = '04f1d8ad65a77c16666ba0d967f3ecd11e054380'
+          test "$FILTER_LAYOUT_SHA" = '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
 
+          # External-market V2 fail-closed/fallback/cache source gates.
           EXT_SHA_FAIL=0
           ext_sha_check() {
             local path="$1" expected="$2" actual
