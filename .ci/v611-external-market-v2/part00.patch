@@ -1,0 +1,97 @@
+--- a/app/src/main/java/tr/borsatakip/v5/data/ExternalMarketQuoteLog.kt
++++ b/app/src/main/java/tr/borsatakip/v5/data/ExternalMarketQuoteLog.kt
+@@ -0,0 +1,58 @@
++package tr.borsatakip.v5.data
++
++import android.content.Context
++import android.util.Log
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++
++class ExternalMarketQuoteLog(context: Context) {
++    private val prefs = context.applicationContext.getSharedPreferences("external_market_quote_log_v611", Context.MODE_PRIVATE)
++
++    fun append(
++        symbol: String,
++        provider: String,
++        stage: String,
++        state: String,
++        durationMs: Long? = null,
++        errorCode: String? = null,
++        detail: String? = null
++    ) {
++        val now = System.currentTimeMillis()
++        val safeDetail = sanitize(detail.orEmpty())
++        val line = buildString {
++            append(now).append('|')
++            append(symbol.trim().uppercase()).append('|')
++            append(provider).append('|')
++            append(stage).append('|')
++            append(state)
++            durationMs?.let { append("|durationMs=").append(it) }
++            errorCode?.takeIf { it.isNotBlank() }?.let { append("|errorCode=").append(it) }
++            if (safeDetail.isNotBlank()) append("|detail=").append(safeDetail.take(240))
++        }
++        Log.i(TAG, line)
++        val lines = prefs.getString(KEY_LINES, "").orEmpty().lineSequence().filter { it.isNotBlank() }.toMutableList()
++        lines += line
++        prefs.edit().putString(KEY_LINES, lines.takeLast(MAX_LINES).joinToString("\n")).apply()
++    }
++
++    fun recent(limit: Int = 50): List<String> =
++        prefs.getString(KEY_LINES, "").orEmpty().lineSequence().filter { it.isNotBlank() }.toList().takeLast(limit.coerceIn(1, MAX_LINES))
++
++    fun formatAttemptTime(epochMs: Long): String = if (epochMs > 0L) {
++        SimpleDateFormat("HH:mm:ss", Locale("tr", "TR")).format(Date(epochMs))
++    } else "—"
++
++    private fun sanitize(raw: String): String = raw
++        .replace(Regex("btk_[A-Za-z0-9_-]{8,}"), "[REDACTED]")
++        .replace(Regex("(?i)authorization\\s*[:=]\\s*[^\\s]+"), "Authorization=[REDACTED]")
++        .replace('\n', ' ')
++        .replace('\r', ' ')
++        .trim()
++
++    companion object {
++        private const val TAG = "EXTERNAL_MARKET"
++        private const val KEY_LINES = "lines"
++        private const val MAX_LINES = 120
++    }
++}
+--- a/app/src/main/java/tr/borsatakip/v5/data/ExternalMarketQuotePolicy.kt
++++ b/app/src/main/java/tr/borsatakip/v5/data/ExternalMarketQuotePolicy.kt
+@@ -0,0 +1,33 @@
++package tr.borsatakip.v5.data
++
++object ExternalMarketQuotePolicy {
++    enum class SourceChoice { FALLBACK, CACHE, NONE }
++
++    fun capabilityMarket(symbol: String): String? = when (symbol.trim().uppercase()) {
++        "USDTRY" -> "FX"
++        "XAUUSD" -> "COMMODITY"
++        else -> null
++    }
++
++    fun fallbackAllowed(experimentalEnabled: Boolean, yahooEnabled: Boolean): Boolean =
++        experimentalEnabled && yahooEnabled
++
++    fun chooseSource(fallbackHasValidStock: Boolean, cacheHasValidStock: Boolean): SourceChoice = when {
++        fallbackHasValidStock -> SourceChoice.FALLBACK
++        cacheHasValidStock -> SourceChoice.CACHE
++        else -> SourceChoice.NONE
++    }
++
++    fun classifyProviderError(message: String?): String {
++        val text = message.orEmpty().uppercase()
++        return when {
++            "HTTP 401" in text || "HTTP 403" in text || "API KEY" in text || "AUTH" in text -> "API_AUTH_ERROR"
++            "HTTP 429" in text || "RATE" in text && "LIMIT" in text -> "RATE_LIMIT"
++            "UNKNOWNHOST" in text || "CONNECT" in text || "SOCKET" in text || "TIMEOUT" in text || "AĞ" in text -> "NETWORK_ERROR"
++            "GEÇERSİZ SEMBOL" in text || "SEMBOL" in text && "BULUN" in text -> "SYMBOL_NOT_FOUND"
++            "CEVAP YAPISI" in text || "QUOTE DİZİSİ" in text || "KAPANIŞ DİZİSİ" in text || "PARSE" in text -> "PARSE_ERROR"
++            text.isBlank() -> "UNKNOWN_ERROR"
++            else -> "PROVIDER_ERROR"
++        }
++    }
++}
