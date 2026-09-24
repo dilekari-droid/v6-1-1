@@ -1,4 +1,4 @@
-name: V6.1.1 Candidate Probe and APK Build
+name: V6.1.1 R3 Recover and APK Build
 
 on:
   push:
@@ -11,75 +11,90 @@ permissions:
   contents: read
 
 jobs:
-  probe-and-build:
+  recover-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - name: Checkout V6.1.1 repository
         uses: actions/checkout@v4
 
-      - name: Probe existing Android source payloads
+      - name: Recover and verify R3 Android payload
         shell: bash
         run: |
-          set -u
-          candidates=(
-            .ci/v611-android-final10k
-            .ci/v611-android-build-r3
-            .ci/v611-android-r3
-            .ci/v611-apk-r3
-            .ci/v611-r3
-            .ci/v611-r4-android-xz
-            .ci/v611-source
-            source-transfer
-            source_parts
-          )
-          selected=''
-          for dir in "${candidates[@]}"; do
-            [ -d "$dir" ] || continue
-            mapfile -t parts < <(find "$dir" -maxdepth 1 -type f -name 'part*.b64' | sort -V)
-            if [ "${#parts[@]}" -eq 0 ]; then
-              mapfile -t parts < <(find "$dir" -maxdepth 1 -type f -name 'chunk*.b64' | sort -V)
-            fi
-            [ "${#parts[@]}" -gt 0 ] || continue
-            echo "PROBE $dir parts=${#parts[@]}"
-            rm -rf /tmp/v611-probe /tmp/v611-payload.bin
-            mkdir -p /tmp/v611-probe
-            if ! cat "${parts[@]}" | tr -d '\r\n' | base64 --decode > /tmp/v611-payload.bin 2>/tmp/base64.err; then
-              echo "REJECT $dir base64"
-              continue
-            fi
-            sha256sum /tmp/v611-payload.bin || true
-            if xz --test /tmp/v611-payload.bin >/dev/null 2>&1; then
-              if ! tar -xJf /tmp/v611-payload.bin -C /tmp/v611-probe >/dev/null 2>&1; then
-                echo "REJECT $dir tar-xz"
-                continue
-              fi
-            elif unzip -tqq /tmp/v611-payload.bin >/dev/null 2>&1; then
-              if ! unzip -q /tmp/v611-payload.bin -d /tmp/v611-probe; then
-                echo "REJECT $dir zip"
-                continue
-              fi
-            else
-              echo "REJECT $dir archive"
-              continue
-            fi
-            ANDROID_DIR="$(find /tmp/v611-probe -type f -name settings.gradle.kts -printf '%h\n' | head -1)"
-            [ -n "$ANDROID_DIR" ] || { echo "REJECT $dir no-settings"; continue; }
-            [ -f "$ANDROID_DIR/app/build.gradle.kts" ] || { echo "REJECT $dir no-app-gradle"; continue; }
-            grep -q 'applicationId = "tr.borsatakip.v5"' "$ANDROID_DIR/app/build.gradle.kts" || { echo "REJECT $dir app-id"; continue; }
-            grep -q 'versionCode = 556' "$ANDROID_DIR/app/build.gradle.kts" || { echo "REJECT $dir version-code"; continue; }
-            grep -q 'versionName = "5.4.16"' "$ANDROID_DIR/app/build.gradle.kts" || { echo "REJECT $dir version-name"; continue; }
-            [ -f "$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5/data/ManualScanProgressPolicy.kt" ] || { echo "REJECT $dir missing-progress-policy"; continue; }
-            selected="$dir"
-            echo "SELECTED_SOURCE=$selected" >> "$GITHUB_ENV"
-            echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
-            echo "SELECTED $selected -> $ANDROID_DIR"
-            break
-          done
-          if [ -z "$selected" ]; then
-            echo 'No complete verified Android payload with R3 progress policy found.' >&2
-            exit 1
-          fi
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import hashlib
+          import lzma
+
+          root = Path('.ci/v611-android-build-r3')
+          files = [root / f'part{i:02d}.b64' for i in range(6)]
+          if not all(p.is_file() for p in files):
+              raise SystemExit('R3 payload parts are missing')
+
+          parts = [''.join(p.read_text().split()) for p in files]
+          lengths = [len(x) for x in parts]
+          print('R3 part lengths:', lengths)
+          if lengths != [12000, 19999, 19999, 19999, 19999, 14776]:
+              raise SystemExit(f'Unexpected R3 part layout: {lengths}')
+
+          alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+          repaired = parts[0]
+          recovered = []
+
+          for i in range(1, 5):
+              survivors = []
+              for ch in alphabet:
+                  prefix = repaired + parts[i] + ch
+                  if i < 4:
+                      probe = prefix + parts[i + 1]
+                      probe = probe[:len(probe) - (len(probe) % 4)]
+                  else:
+                      probe = prefix + parts[5]
+                  try:
+                      raw = base64.b64decode(probe, validate=True)
+                      dec = lzma.LZMADecompressor(format=lzma.FORMAT_XZ)
+                      dec.decompress(raw)
+                      if i == 4 and not dec.eof:
+                          continue
+                      survivors.append(ch)
+                  except (ValueError, lzma.LZMAError):
+                      pass
+              print(f'boundary {i}: survivors={survivors}')
+              if len(survivors) != 1:
+                  raise SystemExit(f'Could not uniquely recover boundary {i}: {survivors}')
+              recovered.append(survivors[0])
+              repaired += parts[i] + survivors[0]
+
+          repaired += parts[5]
+          raw = base64.b64decode(repaired, validate=True)
+          try:
+              out = lzma.decompress(raw, format=lzma.FORMAT_XZ)
+          except lzma.LZMAError as exc:
+              raise SystemExit(f'Recovered payload failed XZ verification: {exc}')
+
+          Path('/tmp/v611-r3-android.tar.xz').write_bytes(raw)
+          print('Recovered chars:', ''.join(recovered))
+          print('Recovered payload bytes:', len(raw))
+          print('Recovered payload SHA256:', hashlib.sha256(raw).hexdigest())
+          print('Decompressed tar bytes:', len(out))
+          PY
+
+          xz --test /tmp/v611-r3-android.tar.xz
+          rm -rf /tmp/v611-src
+          mkdir -p /tmp/v611-src
+          tar -xJf /tmp/v611-r3-android.tar.xz -C /tmp/v611-src
+          ANDROID_DIR="$(find /tmp/v611-src -type f -name settings.gradle.kts -printf '%h\n' | head -1)"
+          test -n "$ANDROID_DIR"
+          test -f "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'applicationId = "tr.borsatakip.v5"' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionCode = 556' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionName = "5.4.16"' "$ANDROID_DIR/app/build.gradle.kts"
+          test -f "$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5/data/ManualScanProgressPolicy.kt"
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=.ci/v611-android-build-r3 (recovered)' >> "$GITHUB_ENV"
+          echo "Recovered V6.1.1 Android source: $ANDROID_DIR"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
