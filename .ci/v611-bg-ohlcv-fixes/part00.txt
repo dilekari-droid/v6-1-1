@@ -1,0 +1,55 @@
+from pathlib import Path
+import sys
+
+android = Path(sys.argv[1]).resolve()
+app = android / 'app'
+main_java = app / 'src/main/java/tr/borsatakip/v5'
+test_java = app / 'src/test/java/tr/borsatakip/v5'
+
+
+def read(path):
+    return path.read_text(encoding='utf-8')
+
+def write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8')
+
+def replace_once(path, old, new):
+    text = read(path)
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f'PATCH_PATTERN_MISMATCH {path}: expected 1 got {count}: {old[:100]!r}')
+    write(path, text.replace(old, new, 1))
+
+# 1) Real V6.1.1 identity + safe public backend default.
+gradle = app / 'build.gradle.kts'
+replace_once(gradle,
+    ').firstOrNull { !it.isNullOrBlank() }?.trim()?.removeSuffix("/").orEmpty()',
+    ').firstOrNull { !it.isNullOrBlank() }?.trim()?.removeSuffix("/").orEmpty()\n        .ifBlank { "https://borsa-takip-backend-live-production.up.railway.app" }')
+replace_once(gradle, 'versionCode = 556', 'versionCode = 611')
+replace_once(gradle, 'versionName = "5.4.16"', 'versionName = "6.1.1"')
+
+strings = app / 'src/main/res/values/strings.xml'
+replace_once(strings, '<string name="app_name">V5.4.16</string>', '<string name="app_name">V6.1.1</string>')
+
+dynamic = main_java / 'ui/DynamicMarketScanActivity.kt'
+replace_once(dynamic, 'text("V5.4.16",11,true)', 'text("V6.1.1",11,true)')
+
+# 2) Directional scan result sort/filter policy.
+sort_policy = main_java / 'ui/ScanResultSortPolicy.kt'
+write(sort_policy, '''package tr.borsatakip.v5.ui\n\nimport tr.borsatakip.v5.analysis.OpportunityRankingPolicy\nimport tr.borsatakip.v5.model.Opportunity\n\n/** UI-only ordering policy. It never recalculates signal direction or scores. */\nobject ScanResultSortPolicy {\n    private val directionalComparator: Comparator<Opportunity> =\n        compareByDescending<Opportunity> { it.finalSignalScore }\n            .thenByDescending { it.score }\n            .thenByDescending { it.dataConfidenceScore }\n            .thenBy { it.symbol }\n\n    private val technicalComparator: Comparator<Opportunity> =\n        compareByDescending<Opportunity> { it.score }\n            .thenByDescending { it.finalSignalScore }\n            .thenByDescending { it.dataConfidenceScore }\n            .thenBy { it.symbol }\n\n    fun directional(items: List<Opportunity>): List<Opportunity> = items.sortedWith(directionalComparator)\n    fun technical(items: List<Opportunity>): List<Opportunity> = items.sortedWith(technicalComparator)\n    fun default(items: List<Opportunity>): List<Opportunity> = OpportunityRankingPolicy.sort(items)\n}\n''')
+
+scan_results = main_java / 'ui/ScanResultsActivity.kt'
+replace_once(scan_results,
+'''            val selected = summaryMode != SummaryMode.FAILED && mode == target\n            button.backgroundTintList = ColorStateList.valueOf(getColor(if (selected) R.color.blue else R.color.chip_bg))\n            button.alpha = if (selected) 1f else 0.88f\n''',
+'''            val selected = summaryMode != SummaryMode.FAILED && mode == target\n            val selectedColor = when (target) {\n                Mode.LONG -> R.color.green\n                Mode.SHORT -> R.color.red\n                else -> R.color.blue\n            }\n            button.backgroundTintList = ColorStateList.valueOf(getColor(if (selected) selectedColor else R.color.chip_bg))\n            button.setTextColor(getColor(when (target) {\n                Mode.LONG -> R.color.green\n                Mode.SHORT -> R.color.red\n                else -> R.color.text_primary\n            }))\n            button.alpha = if (selected) 1f else 0.88f\n''')
+replace_once(scan_results,
+'''        val filtered: List<Opportunity> = when (mode) {\n            Mode.LONG -> if (delayed) emptyList() else source.filter { it.direction.equals("LONG", true) }\n            Mode.SHORT -> if (delayed) emptyList() else source.filter { it.direction.equals("SHORT", true) }\n            Mode.HIGH_POWER -> source.filter { if (delayed) it.score >= 85 else it.finalSignalScore >= 85 }\n            Mode.SCORE, Mode.ALL -> source\n        }.let { filteredItems ->\n            OpportunityRankingPolicy.sort(filteredItems)\n        }\n\n        list.adapter = ScanResultsAdapter(filtered) { opportunity ->\n''',
+'''        val rawFiltered: List<Opportunity> = when (mode) {\n            Mode.LONG -> if (delayed) emptyList() else source.filter { it.direction.equals("LONG", true) }\n            Mode.SHORT -> if (delayed) emptyList() else source.filter { it.direction.equals("SHORT", true) }\n            Mode.HIGH_POWER -> source.filter { if (delayed) it.score >= 85 else it.finalSignalScore >= 85 }\n            Mode.SCORE, Mode.ALL -> source\n        }\n        val filtered = when (mode) {\n            Mode.LONG, Mode.SHORT -> ScanResultSortPolicy.directional(rawFiltered)\n            Mode.SCORE -> ScanResultSortPolicy.technical(rawFiltered)\n            Mode.ALL, Mode.HIGH_POWER -> ScanResultSortPolicy.default(rawFiltered)\n        }\n        if (filtered.isEmpty() && !delayed) {\n            when (mode) {\n                Mode.LONG -> coverageSummary.text = "LONG SİNYALİ BULUNAMADI"\n                Mode.SHORT -> coverageSummary.text = "SHORT SİNYALİ BULUNAMADI"\n                else -> Unit\n            }\n        }\n\n        list.adapter = ScanResultsAdapter(filtered) { opportunity ->\n''')
+replace_once(scan_results,
+'''        configureModeUi()\n        buildSummaryButtons()\n''',
+'''        configureModeUi()\n        findViewById<Button>(R.id.scanLong).text = "↗ LONG"\n        findViewById<Button>(R.id.scanShort).text = "↘ SHORT"\n        buildSummaryButtons()\n''')
+
+# 3) Persistent runtime scan log and screen state monitor.
+scan_log = main_java / 'data/ScanRuntimeLog.kt'
+write(scan_log, '''package tr.borsatakip.v5.data\n\nimport android.content.Context\nimport android.util.Log\nimport java.io.File\nimport java.text.SimpleDateFormat\nimport java.util.Date\nimport java.util.Lo
