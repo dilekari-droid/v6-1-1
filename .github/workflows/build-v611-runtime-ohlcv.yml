@@ -95,8 +95,6 @@ jobs:
           xz --test /tmp/v611-runtime-ohlcv.tar.xz
           tar -xJf /tmp/v611-runtime-ohlcv.tar.xz -C "$ANDROID_DIR"
 
-          # Runtime StockDetail carries the new OHLCV diagnostics. Re-apply the two
-          # proven fail-closed UI rules that are intentionally layered after it.
           python - <<'PY'
           from pathlib import Path
           import os
@@ -119,7 +117,6 @@ jobs:
 
           python "$GITHUB_WORKSPACE/.ci/v611-runtime-network-resilience.py" "$ANDROID_DIR"
 
-          # Apply verified external-market V2 source patch (readable text; no opaque payload).
           EXT_V2_ROOT="$GITHUB_WORKSPACE/.ci/v611-external-market-v2"
           EXT_V2_PATCH=/tmp/v611-external-market-v2.patch
           : > "$EXT_V2_PATCH"
@@ -133,7 +130,6 @@ jobs:
           (cd "$ANDROID_DIR" && patch --dry-run -p1 < "$EXT_V2_PATCH")
           (cd "$ANDROID_DIR" && patch -p1 < "$EXT_V2_PATCH")
 
-          # strings.xml is minified; apply the four visible filter-label changes exactly.
           python - <<'PY'
           from pathlib import Path
           import os
@@ -208,7 +204,6 @@ jobs:
           test "$SCAN_RESULTS_SHA" = '04f1d8ad65a77c16666ba0d967f3ecd11e054380'
           test "$FILTER_LAYOUT_SHA" = '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
 
-          # External-market V2 fail-closed/fallback/cache source gates.
           EXT_SHA_FAIL=0
           ext_sha_check() {
             local path="$1" expected="$2" actual
@@ -236,7 +231,7 @@ jobs:
           grep -Fq 'CAPABILITY_MEMO_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
           grep -Fq 'fallbackMaster.isChecked' "$SRC/ui/SettingsDetailActivity.kt"
           grep -Fq 'yahooFallback.isChecked' "$SRC/ui/SettingsDetailActivity.kt"
-          grep -Fq 'forceRefresh = true' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'load(forceExternalRefresh = true)' "$SRC/ui/MarketInstrumentDetailActivity.kt"
           grep -Fq 'SON BAŞARILI VERİ' "$SRC/ui/MarketInstrumentDetailActivity.kt"
           grep -Fq 'Birincil sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
           grep -Fq 'Yedek sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
