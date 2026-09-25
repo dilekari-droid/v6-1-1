@@ -1,0 +1,11 @@
+--- a/android/app/src/test/java/tr/borsatakip/v5/data/MarketScanReadinessPolicyTest.kt
++++ b/android/app/src/test/java/tr/borsatakip/v5/data/MarketScanReadinessPolicyTest.kt
+@@ -117,7 +117,7 @@
+         val called = mutableListOf<String>()
+         val orchestrator = DynamicMarketScanOrchestrator { route, _, _, _ ->
+             called += route.id
+-            Result.success(response(items = listOf(item(route.id, "WATCH").copy(market = route.backendMarket)))
++            Result.success(response(items = listOf(item(route.id, "WATCH").copy(market = route.backendMarket))))
+         }
+ 
+         val result = orchestrator.run(snapshot, "ALL", "5m")
