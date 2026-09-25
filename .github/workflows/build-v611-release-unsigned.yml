@@ -52,25 +52,25 @@ jobs:
           p = Path('release-src/android/app/build.gradle.kts')
           s = p.read_text()
           old = '''                check(hasReleaseSigning) { "Release APK üretimi için güvenli imzalama değişkenleri zorunludur." }
-                          signingConfig = signingConfigs.getByName("releaseSecure")
-          '''
+                signingConfig = signingConfigs.getByName("releaseSecure")
+'''
           new = '''                val externalSigning = System.getenv("BORSA_EXTERNAL_SIGNING") == "1"
-                          if (externalSigning) {
-                              // Public CI may build an unsigned, non-debuggable release candidate.
-                              // Private-key signing is performed outside the public repository.
-                              signingConfig = null
-                          } else {
-                              check(hasReleaseSigning) { "Release APK üretimi için güvenli imzalama değişkenleri zorunludur." }
-                              signingConfig = signingConfigs.getByName("releaseSecure")
-                          }
-          '''
+                if (externalSigning) {
+                    // Public CI may build an unsigned, non-debuggable release candidate.
+                    // Private-key signing is performed outside the public repository.
+                    signingConfig = null
+                } else {
+                    check(hasReleaseSigning) { "Release APK üretimi için güvenli imzalama değişkenleri zorunludur." }
+                    signingConfig = signingConfigs.getByName("releaseSecure")
+                }
+'''
           if s.count(old) != 1:
               raise SystemExit(f'external-signing patch count={s.count(old)}')
           p.write_text(s.replace(old, new, 1))
           PY
 
           base64 -d "$GITHUB_WORKSPACE/.ci/v611-scan-long-short-overlay.b64" > /tmp/v611-scan-long-short-overlay.tar.xz
-          echo 'b289dcf6c1f2181f5280d05b1e27d5653384ad9190638a4d065025affa92820f  /tmp/v611-scan-long-short-overlay.tar.xz' | sha256sum -c -
+          echo '91e83bb72e75fb53570284c604b166d23afa59605eeacb753e8bff864ce32216  /tmp/v611-scan-long-short-overlay.tar.xz' | sha256sum -c -
           xz --test /tmp/v611-scan-long-short-overlay.tar.xz
           tar -xJf /tmp/v611-scan-long-short-overlay.tar.xz -C release-src/android
 
