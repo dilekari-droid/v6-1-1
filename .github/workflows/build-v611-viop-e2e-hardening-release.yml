@@ -1,0 +1,130 @@
+name: V6.1.1 VIOP E2E Hardening Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-v611-viop-e2e-hardening-release.yml'
+      - '.ci/v611-viop-e2e/**'
+      - 'backend_v611/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-viop-e2e-hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BORSA_EXTERNAL_SIGNING: '1'
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+
+    steps:
+      - name: Checkout pipeline repository
+        uses: actions/checkout@v4
+
+      - name: Download verified provider-readiness source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10862705828/zip' \
+            -o /tmp/base-artifact.zip
+          mkdir -p /tmp/base-artifact
+          unzip -q /tmp/base-artifact.zip -d /tmp/base-artifact
+          echo 'e868abb7752ed19045c2ca3fc04dbd15c982bc7f07b8156967731ab0d06b20fb  /tmp/base-artifact/V6.1.1-PROVIDER-READINESS-UI-SOURCE.zip' | sha256sum -c -
+          mkdir -p release-src
+          unzip -q /tmp/base-artifact/V6.1.1-PROVIDER-READINESS-UI-SOURCE.zip -d release-src
+          test -f release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ProviderCapabilityPresentationPolicy.kt
+          test -f release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicy.kt
+
+      - name: Apply VIOP E2E hardening source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a .ci/v611-viop-e2e/android/ release-src/android/
+          rm -rf release-src/backend_v611
+          cp -a backend_v611 release-src/backend_v611
+          grep -Fq 'contractsReady=x.optBoolean("contractsReady",false)' release-src/android/app/src/main/java/tr/borsatakip/v5/data/MarketCapabilityClient.kt
+          grep -Fq 'HISTORY_INVALID' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ProviderCapabilityPresentationPolicy.kt
+          grep -Fq 'SCANNER_NOT_READY' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ProviderCapabilityPresentationPolicy.kt
+          grep -Fq 'F_P_USDTRY0926' release-src/backend_v611/tests/test_viop_contract_parser.py
+          grep -Fq 'singleflight("quote:X"' release-src/backend_v611/tests/test_trade_wize_quota.py
+          echo 'VIOP_E2E_SOURCE_APPLY=PASS'
+
+      - name: Test backend VIOP hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$GITHUB_WORKSPACE/release-src"
+          mkdir -p out
+          python release-src/backend_v611/tests/test_provider_readiness.py | tee out/backend-readiness-test.txt
+          python release-src/backend_v611/tests/test_viop_contract_parser.py | tee out/backend-parser-test.txt
+          python release-src/backend_v611/tests/test_trade_wize_quota.py | tee out/backend-quota-test.txt
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Test and build unsigned release APK
+        working-directory: release-src/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace testReleaseUnitTest assembleRelease
+
+      - name: Package and verify release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          APK="$(find release-src/android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          test -n "$APK"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$APK" out/V6.1.1-viop-e2e-hardening-unsigned-aligned.apk
+          "$BUILD_TOOLS/zipalign" -c -v 4 out/V6.1.1-viop-e2e-hardening-unsigned-aligned.apk > out/zipalign.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-viop-e2e-hardening-unsigned-aligned.apk > out/badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/badging.txt
+          if grep -q '^application-debuggable$' out/badging.txt; then echo 'release APK is debuggable' >&2; exit 1; fi
+          if "$BUILD_TOOLS/apksigner" verify out/V6.1.1-viop-e2e-hardening-unsigned-aligned.apk 2>/dev/null; then echo 'unexpected pre-signature detected' >&2; exit 1; fi
+          (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-VIOP-E2E-HARDENING-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*')
+          sha256sum out/V6.1.1-viop-e2e-hardening-unsigned-aligned.apk out/V6.1.1-VIOP-E2E-HARDENING-SOURCE.zip > out/SHA256SUMS.txt
+          mkdir -p out/apksigner/lib
+          cp "$BUILD_TOOLS/apksigner" out/apksigner/apksigner
+          cp "$BUILD_TOOLS/lib/apksigner.jar" out/apksigner/lib/apksigner.jar
+          chmod +x out/apksigner/apksigner
+          printf 'VIOP_E2E_HARDENING=PASS\nPARSER_REGEX_FIXED=YES\nF_P_FORMAT_SUPPORTED=YES\nMETADATA_FAIL_CLOSED=YES\nRATE_LIMIT_GATE=YES\nRETRY_AFTER_COOLDOWN=YES\nSINGLE_FLIGHT=YES\nFIRST_FAIL_UI=YES\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nDEBUGGABLE=NO\n' > out/VERIFICATION.txt
+
+      - name: Upload VIOP E2E hardening package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-VIOP-E2E-HARDENING-UNSIGNED-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            out/V6.1.1-viop-e2e-hardening-unsigned-aligned.apk
+            out/V6.1.1-VIOP-E2E-HARDENING-SOURCE.zip
+            out/backend-readiness-test.txt
+            out/backend-parser-test.txt
+            out/backend-quota-test.txt
+            out/badging.txt
+            out/zipalign.txt
+            out/SHA256SUMS.txt
+            out/VERIFICATION.txt
+            out/apksigner/apksigner
+            out/apksigner/lib/apksigner.jar
