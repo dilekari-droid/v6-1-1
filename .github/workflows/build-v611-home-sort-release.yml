@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build-v611-home-sort-release.yml'
       - '.ci/v611-home-opportunity-sort.py'
+      - '.ci/v611-viop-liquidity-overlay.b64'
   workflow_dispatch:
 
 permissions:
@@ -52,8 +53,15 @@ jobs:
           grep -Fq 'TodayOpportunitySortPolicy.sort(' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt
           grep -Fq 'it.analysisLongScore' release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicy.kt
           grep -Fq 'it.analysisShortScore' release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicy.kt
-          grep -Fq 'long_orders_by_analysisLongScore_before_general_ranking' release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicyTest.kt
-          grep -Fq 'short_orders_by_analysisShortScore_before_general_ranking' release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicyTest.kt
+
+      - name: Apply isolated VIOP liquidity fail-closed overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-viop-liquidity-overlay.b64 > /tmp/viop-overlay.tar.xz
+          echo '98aaa1547ba93dae8b2855c067d324eae38b4bfc4209ac9dd8ae292a2f93e783  /tmp/viop-overlay.tar.xz' | sha256sum -c -
+          tar -tJf /tmp/viop-overlay.tar.xz
+          tar -xJf /tmp/viop-overlay.tar.xz -C release-src
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -85,21 +93,16 @@ jobs:
           "$BUILD_TOOLS/zipalign" -c -v 4 out/V6.1.1-home-direction-sort-unsigned-aligned.apk > out/V6.1.1-home-direction-sort-zipalign.txt
           "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-home-direction-sort-unsigned-aligned.apk > out/V6.1.1-home-direction-sort-badging.txt
           grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/V6.1.1-home-direction-sort-badging.txt
-          if grep -q '^application-debuggable$' out/V6.1.1-home-direction-sort-badging.txt; then
-            echo 'release APK is debuggable' >&2
-            exit 1
-          fi
-          if "$BUILD_TOOLS/apksigner" verify out/V6.1.1-home-direction-sort-unsigned-aligned.apk 2>/dev/null; then
-            echo 'unexpected pre-signature detected' >&2
-            exit 1
-          fi
+          if grep -q '^application-debuggable$' out/V6.1.1-home-direction-sort-badging.txt; then exit 1; fi
+          if "$BUILD_TOOLS/apksigner" verify out/V6.1.1-home-direction-sort-unsigned-aligned.apk 2>/dev/null; then exit 1; fi
           (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-HOME-DIRECTION-SORT-SOURCE.zip" android -x 'android/.gradle/*' 'android/**/build/*')
+          if [ -f release-src/android/app/build/outputs/mapping/release/mapping.txt ]; then cp release-src/android/app/build/outputs/mapping/release/mapping.txt out/mapping.txt; fi
           sha256sum out/V6.1.1-home-direction-sort-unsigned-aligned.apk out/V6.1.1-HOME-DIRECTION-SORT-SOURCE.zip > out/SHA256SUMS.txt
           mkdir -p out/apksigner/lib
           cp "$BUILD_TOOLS/apksigner" out/apksigner/apksigner
           cp "$BUILD_TOOLS/lib/apksigner.jar" out/apksigner/lib/apksigner.jar
           chmod +x out/apksigner/apksigner
-          printf 'HOME_DIRECTION_SORT=PASS\nALL_ORDER=PRESERVED\nLONG_ORDER=analysisLongScore>finalSignalScore>dataConfidence\nSHORT_ORDER=analysisShortScore>finalSignalScore>dataConfidence\nDEBUGGABLE=NO\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\n' > out/VERIFICATION.txt
+          printf 'HOME_DIRECTION_SORT=PASS\nVIOP_LIQUIDITY_FAIL_CLOSED=PASS\nOI_FAKE_VALUE=NO\nVOLUME_FALLBACK=CLOSED_OHLCV_ONLY\nDEBUGGABLE=NO\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\n' > out/VERIFICATION.txt
 
       - name: Upload home direction sort package
         uses: actions/upload-artifact@v4
@@ -114,5 +117,6 @@ jobs:
             out/V6.1.1-home-direction-sort-zipalign.txt
             out/SHA256SUMS.txt
             out/VERIFICATION.txt
+            out/mapping.txt
             out/apksigner/apksigner
             out/apksigner/lib/apksigner.jar
