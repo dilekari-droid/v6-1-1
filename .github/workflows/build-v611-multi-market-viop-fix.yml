@@ -5,6 +5,7 @@ on:
     branches: [ v611-multi-market-final ]
     paths:
       - '.ci/v611-multi-market-viop-fix.patch.xz.b64'
+      - '.ci/v611-multi-market-test-compile-fix.patch'
       - '.github/workflows/build-v611-multi-market-viop-fix.yml'
   workflow_dispatch:
 
@@ -66,6 +67,8 @@ jobs:
           xz -dc /tmp/fix.patch.xz > /tmp/fix.patch
           (cd release-src && patch --dry-run -p1 < /tmp/fix.patch)
           (cd release-src && patch -p1 < /tmp/fix.patch)
+          (cd release-src && patch --dry-run -p1 < "$GITHUB_WORKSPACE/.ci/v611-multi-market-test-compile-fix.patch")
+          (cd release-src && patch -p1 < "$GITHUB_WORKSPACE/.ci/v611-multi-market-test-compile-fix.patch")
           ! grep -R -F 'TÜM PİYASALAR engellendi' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/DynamicMarketScanActivity.kt
           ! grep -Fq 'selectedMarket==MarketTab.ALL && !snapshot.multiMarketReady' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/DynamicMarketScanActivity.kt
           test -f release-src/android/app/src/main/java/tr/borsatakip/v5/data/MarketScanReadiness.kt
