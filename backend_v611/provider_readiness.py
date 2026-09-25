@@ -28,6 +28,8 @@ class ViopReadinessInput:
     quote_valid: bool
     history_valid: bool
     freshness_valid: bool
+    liquidity_valid: bool
+    scanner_ready: bool
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,8 @@ def viop_ready(data: ViopReadinessInput) -> bool:
         and data.quote_valid
         and data.history_valid
         and data.freshness_valid
+        and data.liquidity_valid
+        and data.scanner_ready
     )
 
 
@@ -84,6 +88,8 @@ def build_capability_patch(data: ProviderReadinessInput) -> dict:
                 "quoteReady": bool(data.viop.quote_valid),
                 "historyReady": bool(data.viop.history_valid),
                 "freshnessReady": bool(data.viop.freshness_valid),
+                "liquidityReady": bool(data.viop.liquidity_valid),
+                "scannerReady": bool(data.viop.scanner_ready),
             },
             **{name: {"ready": bool(value)} for name, value in data.additional_required_markets.items()},
         },
