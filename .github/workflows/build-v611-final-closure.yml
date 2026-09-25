@@ -1,0 +1,248 @@
+name: V6.1.1 Final Closure Source and APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.ci/v611-final-prompt-closure.py'
+      - '.ci/v611-overlay-r3/**'
+      - '.ci/v611-uiux-v6-fixes.py'
+      - '.ci/v611-uiux-v6-copy-fixes.py'
+      - '.ci/v611-uiux-v6-favorites-failclosed.py'
+      - '.ci/v611-uiux-v6-state-failclosed.py'
+      - '.ci/v611-runtime-ohlcv-v611/**'
+      - '.ci/v611-runtime-network-resilience.py'
+      - '.ci/v611-external-market-v2/**'
+      - '.github/workflows/build-v611-final-closure.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-test-build-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout V6.1.1 payload repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned V5 Android base
+        uses: actions/checkout@v4
+        with:
+          repository: dilekari-droid/v5.1.1
+          ref: 28c18f669970f5a7621e89b80179c63c94b6f7aa
+          path: base-v5
+
+      - name: Reconstruct final closure source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
+
+          ROOT='.ci/v611-overlay-r3'
+          PARTS=(
+            part00.b64 part01.b64 part02.b64 part03.b64 part04.b64
+            part05a.b64 part05b.b64 part06a.b64 part06b.b64
+            part07a.b64 part07b.b64 part08a.b64 part08b.b64 part09.b64
+          )
+          : > /tmp/v611-overlay.b64
+          for part in "${PARTS[@]}"; do test -s "$ROOT/$part"; cat "$ROOT/$part" >> /tmp/v611-overlay.b64; done
+          test "$(wc -c < /tmp/v611-overlay.b64)" -eq 73804
+          base64 -d /tmp/v611-overlay.b64 > /tmp/v611-overlay.tar.xz
+          echo '29989105d1adb64dcd6fb4a514f803adebfd693b07fe3ddbfe775127751e04fc  /tmp/v611-overlay.tar.xz' | sha256sum -c -
+          xz --test /tmp/v611-overlay.tar.xz
+          tar -xJf /tmp/v611-overlay.tar.xz -C "$ANDROID_DIR"
+          test -f "$ANDROID_DIR/DELETE-LIST.txt"
+          while IFS= read -r rel; do test -n "$rel" || continue; rm -f -- "$ANDROID_DIR/$rel"; done < "$ANDROID_DIR/DELETE-LIST.txt"
+          rm -f "$ANDROID_DIR/DELETE-LIST.txt"
+
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-fixes.py" "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-copy-fixes.py" "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-favorites-failclosed.py" "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-state-failclosed.py" "$ANDROID_DIR"
+
+          ROOT='.ci/v611-runtime-ohlcv-v611'
+          : > /tmp/v611-runtime-ohlcv.b64
+          for n in 00 01 02 03 04 05 06 07 08 09; do
+            part="$ROOT/part${n}.b64"
+            test -s "$part"
+            cat "$part" >> /tmp/v611-runtime-ohlcv.b64
+          done
+          test "$(wc -c < /tmp/v611-runtime-ohlcv.b64)" -eq 58080
+          base64 -d /tmp/v611-runtime-ohlcv.b64 > /tmp/v611-runtime-ohlcv.tar.xz
+          echo '464da8f9c532fdd58e23df939e7fed0119b71908bdd8a2f073c0563164f56b06  /tmp/v611-runtime-ohlcv.tar.xz' | sha256sum -c -
+          xz --test /tmp/v611-runtime-ohlcv.tar.xz
+          tar -xJf /tmp/v611-runtime-ohlcv.tar.xz -C "$ANDROID_DIR"
+
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ['GITHUB_WORKSPACE']) / 'base-v5/android/app/src/main/java/tr/borsatakip/v5/ui/StockDetailActivity.kt'
+          s = p.read_text()
+          old = '''                chartStatus.text = "${timeframe.label}: gerçek OHLCV verisi alınamadı • ${error.message ?: error.javaClass.simpleName}"
+                          trendInfoPanel.text = "Trend analizi için yeterli veri yok."'''
+          new = '''                android.util.Log.w("StockDetailActivity", "Chart load failed for ${timeframe.label}", error)
+                          chartStatus.text = "${timeframe.label}: gerçek OHLCV verisi alınamadı. Veri sağlayıcı durumunu kontrol edin."
+                          trendInfoPanel.text = "Trend analizi için yeterli veri yok."'''
+          if s.count(old) != 1:
+              raise SystemExit(f'StockDetail runtime error-copy pattern count={s.count(old)}')
+          s = s.replace(old, new, 1)
+          old2 = '    private fun money(v:Double)=if(v.isFinite())"%.2f TL".format(v) else "Veri yok"'
+          new2 = '    private fun money(v:Double)=if(v.isFinite() && v > 0.0)"%.2f TL".format(v) else "Veri yok"'
+          if s.count(old2) != 1:
+              raise SystemExit(f'StockDetail money gate pattern count={s.count(old2)}')
+          p.write_text(s.replace(old2, new2, 1))
+          PY
+
+          python "$GITHUB_WORKSPACE/.ci/v611-runtime-network-resilience.py" "$ANDROID_DIR"
+
+          EXT_ROOT="$GITHUB_WORKSPACE/.ci/v611-external-market-v2"
+          EXT_PATCH=/tmp/v611-external-market-v2.patch
+          : > "$EXT_PATCH"
+          for n in 00 01 02 03 04; do
+            test -s "$EXT_ROOT/part${n}.patch"
+            cat "$EXT_ROOT/part${n}.patch" >> "$EXT_PATCH"
+          done
+          test "$(wc -c < "$EXT_PATCH")" -eq 50237
+          echo 'aeb8ae7309e206a9b9b8d4ad5deb0a399b8497d234a0886ba5bc1c7905e118f7  /tmp/v611-external-market-v2.patch' | sha256sum -c -
+          (cd "$ANDROID_DIR" && patch --dry-run -p1 < "$EXT_PATCH")
+          (cd "$ANDROID_DIR" && patch -p1 < "$EXT_PATCH")
+
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ['GITHUB_WORKSPACE']) / 'base-v5/android/app/src/main/res/values/strings.xml'
+          s = p.read_text()
+          replacements = {
+              '>LONG<': '>↗ LONG<',
+              '>SHORT<': '>↘ SHORT<',
+              '>85+ GÜÇLÜ<': '>85+ TEKNİK<',
+              '>SKORA GÖRE<': '>TEKNİK PUAN<',
+          }
+          for old, new in replacements.items():
+              if s.count(old) != 1:
+                  raise SystemExit(f'filter string pattern count={s.count(old)} pattern={old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          python "$GITHUB_WORKSPACE/.ci/v611-final-prompt-closure.py" "$ANDROID_DIR"
+
+          SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
+          TESTSRC="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5"
+          STRINGS="$ANDROID_DIR/app/src/main/res/values/strings.xml"
+          FILTER_LAYOUT="$ANDROID_DIR/app/src/main/res/layout/activity_scan_results.xml"
+          VIOP_LAYOUT="$ANDROID_DIR/app/src/main/res/layout/activity_viop.xml"
+
+          # Identity/config gates.
+          grep -q 'applicationId = "tr.borsatakip.v5"' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionCode = 611' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionName = "6.1.1"' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -Fq 'https://borsa-takip-backend-live-production.up.railway.app' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -Fq '<string name="app_name">V6.1.1</string>' "$STRINGS"
+          ! grep -R -E 'btk_[A-Za-z0-9]{20,}' "$ANDROID_DIR/app/src" "$ANDROID_DIR/app/build.gradle.kts"
+
+          # Result filter/card gates.
+          grep -Fq 'android:weightSum="5"' "$FILTER_LAYOUT"
+          grep -Fq '↗ LONG' "$STRINGS"
+          grep -Fq '↘ SHORT' "$STRINGS"
+          grep -Fq '85+ TEKNİK' "$STRINGS"
+          grep -Fq 'TEKNİK PUAN' "$STRINGS"
+          grep -Fq 'ScanResultSortPolicy.directional' "$SRC/ui/ScanResultsActivity.kt"
+          grep -Fq '#${position + 1}' "$SRC/ui/ScanResultsAdapter.kt"
+          grep -Fq '↗ LONG • AL ADAYI' "$SRC/ui/ScanResultsAdapter.kt"
+          grep -Fq '↘ SHORT • SAT ADAYI' "$SRC/ui/ScanResultsAdapter.kt"
+          grep -Fq 'signalStrengthAccent' "$SRC/ui/ScanResultsAdapter.kt"
+
+          # Background/network gates.
+          grep -Fq 'SCAN_SCREEN_LOCKED' "$SRC/worker/ScanScreenStateMonitor.kt"
+          grep -Fq 'SCAN_SCREEN_UNLOCKED' "$SRC/worker/ScanScreenStateMonitor.kt"
+          grep -Fq 'START_REDELIVER_INTENT' "$SRC/worker/BistScanForegroundService.kt"
+          grep -Fq 'awaitValidatedNetworkIfNeeded()' "$SRC/worker/BistScanForegroundService.kt"
+          grep -Fq 'ProviderFailureCode.NETWORK_TIMEOUT, ProviderFailureCode.DNS_ERROR' "$SRC/data/MobileMarketDataProvider.kt"
+
+          # OHLCV gates.
+          grep -Fq 'THIRTY_MIN("30 DK"' "$SRC/analysis/ChartTimeframe.kt"
+          grep -Fq 'FOUR_HOUR("4 SA"' "$SRC/analysis/ChartTimeframe.kt"
+          grep -Fq 'showEma21' "$SRC/ui/PriceChartView.kt"
+          grep -Fq 'emptyStateMessage' "$SRC/ui/PriceChartView.kt"
+          grep -Fq 'ChartHistoryFailureReason.INSUFFICIENT_CANDLES' "$SRC/ui/StockDetailActivity.kt"
+          grep -Fq 'OHLCV_FLOW' "$SRC/ui/StockDetailActivity.kt"
+          grep -Fq 'OHLCV_HTTP' "$SRC/data/MobileMarketDataProvider.kt"
+          grep -Fq 'encodedPath' "$SRC/data/MobileMarketDataProvider.kt"
+
+          # External market gates.
+          test -f "$SRC/data/ExternalMarketQuoteService.kt"
+          test -f "$SRC/data/ExternalMarketQuoteLog.kt"
+          test -f "$SRC/data/ExternalMarketQuotePolicy.kt"
+          test -f "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt"
+          grep -Fq 'MEMO_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'fallbackMaster.isChecked' "$SRC/ui/SettingsDetailActivity.kt"
+          grep -Fq 'yahooFallback.isChecked' "$SRC/ui/SettingsDetailActivity.kt"
+          grep -Fq 'load(forceExternalRefresh = true)' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'loadInFlight' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'SON BAŞARILI VERİ' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'Birincil sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'Yedek sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'ExternalMarketQuoteService(this)' "$SRC/ui/MainActivity.kt"
+          grep -Fq 'ExternalMarketQuoteService(this@ViopActivity)' "$SRC/ui/ViopActivity.kt"
+          grep -Fq 'TRY=X' "$SRC/ui/ViopActivity.kt"
+          grep -Fq 'XAUUSD=X' "$SRC/ui/ViopActivity.kt"
+          grep -Fq 'GC=F' "$SRC/ui/ViopActivity.kt"
+          test "$(grep -Fc 'Sağlayıcılar kontrol ediliyor' "$VIOP_LAYOUT")" -eq 2
+          ! grep -Fq 'Doğrulanmış kaynak yok' "$VIOP_LAYOUT"
+
+          # Source-distribution hygiene gates.
+          if find "$ANDROID_DIR" -type f \( -name '*.orig' -o -name '*.rej' -o -name '*.bak' -o -name '*~' \) | grep -q .; then
+            echo 'stale backup source files detected' >&2
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          rm -rf "$ANDROID_DIR/.gradle" "$ANDROID_DIR/app/build" "$ANDROID_DIR/build"
+          (cd "$GITHUB_WORKSPACE/base-v5" && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-FINAL-CLOSURE-SOURCE.zip" android -x 'android/.gradle/*' 'android/**/build/*')
+          sha256sum "$GITHUB_WORKSPACE/out/V6.1.1-FINAL-CLOSURE-SOURCE.zip" | tee "$GITHUB_WORKSPACE/out/V6.1.1-FINAL-CLOSURE-SOURCE.zip.sha256"
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 + UIUX-V6 + runtime/OHLCV + network resilience + external market V2 + final prompt closure' >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run Android unit tests
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
+
+      - name: Build debug APK
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Verify and package closure APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$ANDROID_DIR/app/build/outputs/apk/debug" -type f -name '*.apk' | head -1)"
+          test -n "$APK"
+          cp "$APK" out/V6.1.1-FINAL-CLOSURE-debug.apk
+          sha256sum out/V6.1.1-FINAL-CLOSURE-debug.apk | tee out/V6.1.1-FINAL-CLOSURE-debug.apk.sha256
+          printf 'source=%s\n' "$SELECTED_SOURCE" | tee out/V6.1.1-FINAL-CLOSURE-source.txt
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-FINAL-CLOSURE-debug.apk | tee out/V6.1.1-FINAL-CLOSURE-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-FINAL-CLOSURE-debug.apk | tee out/V6.1.1-FINAL-CLOSURE-signature.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/V6.1.1-FINAL-CLOSURE-badging.txt
+
+      - name: Upload final closure source and APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-FINAL-CLOSURE-SOURCE-APK
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
