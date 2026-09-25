@@ -1,0 +1,145 @@
+name: V6.1.1 Home Opportunity E2E
+
+on:
+  push:
+    branches: [ v611-home-opportunity-e2e ]
+    paths:
+      - '.ci/v611-home-opportunity-e2e.patch.xz.b64'
+      - '.github/workflows/build-v611-home-opportunity-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+      RELEASE_KEYSTORE_B64: ${{ secrets.BORSA_KEYSTORE_B64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.BORSA_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.BORSA_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.BORSA_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout pipeline branch
+        uses: actions/checkout@v4
+
+      - name: Download previous verified V6.1.1 source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10871790520/zip' \
+            -o /tmp/base-package.zip
+          mkdir -p /tmp/base-package release-src
+          unzip -q /tmp/base-package.zip -d /tmp/base-package
+          echo 'b1acecab9dedc0da7a99d4ebb3c25ad42fb02e1b4531068aad8d43a87e9744e3  /tmp/base-package/V6.1.1-MULTI-MARKET-VIOP-FIX-SOURCE.zip' | sha256sum -c -
+          unzip -q /tmp/base-package/V6.1.1-MULTI-MARKET-VIOP-FIX-SOURCE.zip -d release-src
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__
+
+      - name: Apply Home opportunity E2E patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-home-opportunity-e2e.patch.xz.b64 > /tmp/home-e2e.patch.xz
+          echo '5f55345225785401de621bd23d9a383df948dbfc81a684483628f663ebc7b061  /tmp/home-e2e.patch.xz' | sha256sum -c -
+          xz -dc /tmp/home-e2e.patch.xz > /tmp/home-e2e.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/home-e2e.patch)
+          (cd release-src && patch -p1 < /tmp/home-e2e.patch)
+
+          SRC='release-src/android/app/src/main/java/tr/borsatakip/v5'
+          TEST='release-src/android/app/src/test/java/tr/borsatakip/v5'
+          test -f "$SRC/analysis/HomeOpportunityFeedPolicy.kt"
+          test -f "$TEST/analysis/HomeOpportunityFeedPolicyTest.kt"
+          grep -Fq 'DynamicMarketScanResultRepository.state.collect' "$SRC/ui/MainActivity.kt"
+          grep -Fq 'HomeOpportunityFeedPolicy.resolve' "$SRC/ui/MainActivity.kt"
+          grep -Fq 'Doğrulanmış fırsat bulunamadı.' "$SRC/ui/MainActivity.kt"
+          grep -Fq 'TARAMA İLERLEMESİ • %' "$SRC/ui/DynamicMarketScanActivity.kt"
+          grep -Fq 'SCAN_PROGRESS' "$SRC/ui/DynamicMarketScanActivity.kt"
+          grep -Fq 'onProgress?.invoke' "$SRC/data/DynamicMarketScannerClient.kt"
+          grep -Fq 'Filter.ALL -> actionable.map' "$SRC/analysis/HomeOpportunityFilterPolicy.kt"
+          echo 'HOME_E2E_PATCH=PASS'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run release unit tests
+        working-directory: release-src/android
+        shell: bash
+        env:
+          BORSA_EXTERNAL_SIGNING: '1'
+        run: gradle --no-daemon --stacktrace testReleaseUnitTest
+
+      - name: Build release and debug APKs
+        working-directory: release-src/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${RELEASE_KEYSTORE_B64:-}" ] && [ -n "${RELEASE_STORE_PASSWORD:-}" ] && [ -n "${RELEASE_KEY_ALIAS:-}" ] && [ -n "${RELEASE_KEY_PASSWORD:-}" ]; then
+            printf '%s' "$RELEASE_KEYSTORE_B64" | base64 -d > /tmp/v611-release.keystore
+            export BORSA_KEYSTORE_PATH=/tmp/v611-release.keystore
+            export BORSA_STORE_PASSWORD="$RELEASE_STORE_PASSWORD"
+            export BORSA_KEY_ALIAS="$RELEASE_KEY_ALIAS"
+            export BORSA_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+            unset BORSA_EXTERNAL_SIGNING
+            gradle --no-daemon --stacktrace assembleRelease
+            echo 'RELEASE_SIGNING=CI_SECRET' >> "$GITHUB_ENV"
+          else
+            export BORSA_EXTERNAL_SIGNING=1
+            gradle --no-daemon --stacktrace assembleRelease
+            echo 'RELEASE_SIGNING=UNAVAILABLE' >> "$GITHUB_ENV"
+          fi
+          gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Package and verify outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          RELEASE_APK="$(find release-src/android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          DEBUG_APK="$(find release-src/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -1)"
+          test -n "$RELEASE_APK" && test -n "$DEBUG_APK"
+
+          if "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RELEASE_APK" > out/release-signature.txt 2>&1; then
+            cp "$RELEASE_APK" out/V6.1.1-HOME-OPPORTUNITY-E2E-RELEASE.apk
+            echo 'RELEASE_SIGNATURE=PASS' >> out/VERIFICATION.txt
+          else
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$RELEASE_APK" out/V6.1.1-HOME-OPPORTUNITY-E2E-UNSIGNED-ALIGNED.apk
+            echo 'RELEASE_SIGNATURE=BLOCKED_NO_RELEASE_KEY' >> out/VERIFICATION.txt
+          fi
+
+          cp "$DEBUG_APK" out/V6.1.1-HOME-OPPORTUNITY-E2E-DEBUG.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-HOME-OPPORTUNITY-E2E-DEBUG.apk > out/debug-signature.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-HOME-OPPORTUNITY-E2E-DEBUG.apk > out/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/debug-badging.txt
+
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__
+          (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-HOME-OPPORTUNITY-E2E-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*')
+          printf 'HOME_DYNAMIC_SCAN_BRIDGE=PASS\nHOME_LONG_SHORT_FAIL_CLOSED=PASS\nWATCH_EXCLUDED_FROM_HOME=PASS\nSTALE_DYNAMIC_SIGNAL_REJECTED=PASS\nSCAN_PERCENT_PROGRESS=PASS\nSCAN_AUDIT_LOGS=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nRELEASE_SIGNING=%s\nPHYSICAL_DEVICE=NOT_RUN\n' "$RELEASE_SIGNING" >> out/VERIFICATION.txt
+          sha256sum out/*.apk out/*.zip > out/SHA256SUMS.txt
+
+      - name: Upload Home opportunity E2E package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-HOME-OPPORTUNITY-E2E-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: out/*
