@@ -1,0 +1,127 @@
+name: V6.1.1 VIOP OI Propagation Verify
+
+on:
+  push:
+    branches: [ hardening/v611-viop-oi-propagation ]
+    paths:
+      - '.ci/v611-viop-oi-propagation.patch'
+      - '.github/workflows/verify-v611-viop-oi-propagation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BORSA_EXTERNAL_SIGNING: '1'
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+
+    steps:
+      - name: Checkout verification branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct verified VIOP liquidity source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10859607455/zip' \
+            -o /tmp/base-artifact.zip
+          mkdir -p /tmp/base-artifact
+          unzip -q /tmp/base-artifact.zip -d /tmp/base-artifact
+          echo '82330e45956a9772a191aa0b4f000b520b2f8618162400ecdfdd46f768953df9  /tmp/base-artifact/V6.1.1-HOME-DIRECTION-SORT-SOURCE.zip' | sha256sum -c -
+          mkdir -p release-src
+          unzip -q /tmp/base-artifact/V6.1.1-HOME-DIRECTION-SORT-SOURCE.zip -d release-src
+          base64 -d .ci/v611-viop-liquidity-overlay.b64 > /tmp/liquidity-overlay.tar.xz
+          tar -xJf /tmp/liquidity-overlay.tar.xz -C /tmp/liquidity-overlay
+        
+      - name: Apply verified liquidity overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d /tmp/liquidity-overlay/android ]; then
+            rsync -a /tmp/liquidity-overlay/android/ release-src/android/
+          elif [ -d /tmp/liquidity-overlay/release-src/android ]; then
+            rsync -a /tmp/liquidity-overlay/release-src/android/ release-src/android/
+          elif [ -d /tmp/liquidity-overlay/app ]; then
+            rsync -a /tmp/liquidity-overlay/app/ release-src/android/app/
+          else
+            echo 'Unknown liquidity overlay root' >&2
+            exit 1
+          fi
+          cp -a release-src /tmp/release-before-oi-propagation
+
+      - name: Apply isolated OI propagation patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch --batch --fuzz=0 -p2 -d release-src < .ci/v611-viop-oi-propagation.patch
+          SCANNER='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt'
+          TEST='release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt'
+          INTEGRATION='release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopScannerLiquidityIntegrationTest.kt'
+          test -f "$SCANNER" -a -f "$TEST" -a -f "$INTEGRATION"
+          test "$(grep -c 'ViopLiquidityInputPolicy.resolve(' "$SCANNER")" -eq 1
+          grep -Fq 'liquidityInputs = liquidityInputs' "$SCANNER"
+          grep -Fq 'val oiAvailable = liquidityInputs.openInterestAvailable' "$SCANNER"
+          grep -Fq 'contract_oi_used_when_quote_oi_is_zero' "$TEST"
+          grep -Fq 'unclosed_last_bar_can_never_be_used_as_liquidity_fallback' "$INTEGRATION"
+
+      - name: Verify three-file source isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          before=Path('/tmp/release-before-oi-propagation')
+          after=Path('release-src')
+          changed=set()
+          for p in after.rglob('*'):
+              if not p.is_file():
+                  continue
+              rel=p.relative_to(after).as_posix()
+              q=before/rel
+              if not q.exists() or hashlib.sha256(p.read_bytes()).digest()!=hashlib.sha256(q.read_bytes()).digest():
+                  changed.add(rel)
+          for q in before.rglob('*'):
+              if q.is_file():
+                  rel=q.relative_to(before).as_posix()
+                  if not (after/rel).exists():
+                      changed.add(rel)
+          expected={
+              'android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt',
+              'android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt',
+              'android/app/src/test/java/tr/borsatakip/v5/analysis/ViopScannerLiquidityIntegrationTest.kt',
+          }
+          print('CHANGED_FILES=', *sorted(changed), sep='\n')
+          if changed != expected:
+              raise SystemExit(f'isolation mismatch: {changed!r}')
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Test and assemble release
+        working-directory: release-src/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace testReleaseUnitTest assembleRelease
