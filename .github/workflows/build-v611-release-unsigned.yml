@@ -52,18 +52,18 @@ jobs:
           p = Path('release-src/android/app/build.gradle.kts')
           s = p.read_text()
           old = '''                check(hasReleaseSigning) { "Release APK üretimi için güvenli imzalama değişkenleri zorunludur." }
-                signingConfig = signingConfigs.getByName("releaseSecure")
-'''
+                          signingConfig = signingConfigs.getByName("releaseSecure")
+          '''
           new = '''                val externalSigning = System.getenv("BORSA_EXTERNAL_SIGNING") == "1"
-                if (externalSigning) {
-                    // Public CI may build an unsigned, non-debuggable release candidate.
-                    // Private-key signing is performed outside the public repository.
-                    signingConfig = null
-                } else {
-                    check(hasReleaseSigning) { "Release APK üretimi için güvenli imzalama değişkenleri zorunludur." }
-                    signingConfig = signingConfigs.getByName("releaseSecure")
-                }
-'''
+                          if (externalSigning) {
+                              // Public CI may build an unsigned, non-debuggable release candidate.
+                              // Private-key signing is performed outside the public repository.
+                              signingConfig = null
+                          } else {
+                              check(hasReleaseSigning) { "Release APK üretimi için güvenli imzalama değişkenleri zorunludur." }
+                              signingConfig = signingConfigs.getByName("releaseSecure")
+                          }
+          '''
           if s.count(old) != 1:
               raise SystemExit(f'external-signing patch count={s.count(old)}')
           p.write_text(s.replace(old, new, 1))
