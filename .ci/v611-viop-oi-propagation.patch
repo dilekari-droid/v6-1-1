@@ -1,0 +1,153 @@
+diff --git a/patch_old/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt b/patch_new/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt
+index 230f4ac..8e32909 100644
+--- a/patch_old/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt
++++ b/patch_new/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt
+@@ -392,7 +392,14 @@ class ViopScanner(
+ 
+         val technical = TechnicalAnalyzer.analyze(candles)
+         val opportunity = try {
+-            score(contract, quote, candles, technical, publishAge.coerceAtLeast(0L))
++            score(
++                contract = contract,
++                quote = quote,
++                candles = candles,
++                t = technical,
++                age = publishAge.coerceAtLeast(0L),
++                liquidityInputs = liquidityInputs
++            )
+         } catch (ce: CancellationException) {
+             throw ce
+         } catch (t: Throwable) {
+@@ -426,7 +433,8 @@ class ViopScanner(
+         quote: tr.borsatakip.v5.model.ViopQuote,
+         candles: List<Candle>,
+         t: tr.borsatakip.v5.model.TechnicalSnapshot,
+-        age: Long
++        age: Long,
++        liquidityInputs: ViopLiquidityInputPolicy.Resolution
+     ): ViopOpportunity {
+         check(contract.validity == SignalValidity.VALID) { "CONTRACT_NOT_VALID: ${contract.symbol} analiz kapısına geçemez." }
+         val price = DecisionPricePolicy.historyBarPrice(candles)
+@@ -449,16 +457,10 @@ class ViopScanner(
+         val structureDistanceAtr = if (atr != null) {
+             listOfNotNull(support, resistance).minOfOrNull { abs(price - it) }?.div(atr)
+         } else null
+-        val volumeAvailable = ViopLiquidityInputPolicy.resolve(
+-            quoteVolume = quote.volume,
+-            contractVolume = contract.volume,
+-            lastClosedBarVolume = candles.lastOrNull()?.volume,
+-            quoteOpenInterest = quote.openInterest,
+-            contractOpenInterest = contract.openInterest,
+-            minVolume = MIN_VOLUME,
+-            minOpenInterest = MIN_OPEN_INTEREST
+-        ).volume != null
+-        val oiAvailable = (quote.openInterest ?: contract.openInterest ?: 0L) >= MIN_OPEN_INTEREST
++        // Single source of truth: admission resolves genuine liquidity inputs once.
++        // Propagate that exact Resolution into V531 data-quality and diagnostics.
++        val volumeAvailable = liquidityInputs.volume != null
++        val oiAvailable = liquidityInputs.openInterestAvailable
+         val v531 = V531CalculationEngine.calculate(
+             V531CalculationInput(
+                 candles = candles,
+diff --git a/patch_old/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt b/patch_new/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt
+index fcf360a..c7f2967 100644
+--- a/patch_old/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt
++++ b/patch_new/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt
+@@ -45,4 +45,47 @@ class ViopLiquidityInputPolicyTest {
+         assertNull(r.volume)
+         assertEquals(ViopLiquidityInputPolicy.VolumeSource.NONE, r.volumeSource)
+     }
++
++    @Test fun contract_volume_used_when_quote_volume_missing() {
++        val r = resolve(qv = null, cv = 88.0, bar = 44.0)
++        assertEquals(88.0, r.volume!!, 0.0)
++        assertEquals(ViopLiquidityInputPolicy.VolumeSource.CONTRACT, r.volumeSource)
++        assertNull(r.rejectCode)
++    }
++
++    @Test fun contract_volume_used_when_quote_volume_below_threshold() {
++        val r = resolve(qv = 0.5, cv = 77.0, bar = 44.0)
++        assertEquals(77.0, r.volume!!, 0.0)
++        assertEquals(ViopLiquidityInputPolicy.VolumeSource.CONTRACT, r.volumeSource)
++    }
++
++    @Test fun non_finite_quote_volume_is_ignored() {
++        val r = resolve(qv = Double.NaN, cv = 66.0, bar = 44.0)
++        assertEquals(66.0, r.volume!!, 0.0)
++        assertEquals(ViopLiquidityInputPolicy.VolumeSource.CONTRACT, r.volumeSource)
++    }
++
++    @Test fun contract_oi_used_when_quote_oi_is_zero() {
++        val r = resolve(bar = 55.0, qoi = 0L, coi = 100L)
++        assertEquals(100L, r.openInterest)
++        assertTrue(r.openInterestAvailable)
++        assertNull(r.rejectCode)
++    }
++
++    @Test fun exact_minimum_thresholds_are_accepted() {
++        val r = resolve(qv = 1.0, qoi = 1L)
++        assertEquals(1.0, r.volume!!, 0.0)
++        assertEquals(1L, r.openInterest)
++        assertTrue(r.openInterestAvailable)
++        assertNull(r.rejectCode)
++    }
++
++    @Test fun no_volume_with_valid_oi_still_rejects() {
++        val r = resolve(qv = 0.0, cv = 0.0, bar = 0.0, qoi = 10L)
++        assertEquals("LOW_LIQUIDITY", r.rejectCode)
++        assertNull(r.volume)
++        assertFalse(r.openInterestAvailable)
++        assertNull(r.openInterest)
++    }
++
+ }
+diff --git a/patch_new/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopScannerLiquidityIntegrationTest.kt b/patch_new/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopScannerLiquidityIntegrationTest.kt
+new file mode 100644
+index 0000000..4322cdc
+--- /dev/null
++++ b/patch_new/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopScannerLiquidityIntegrationTest.kt
+@@ -0,0 +1,44 @@
++package tr.borsatakip.v5.analysis
++
++import org.junit.Assert.*
++import org.junit.Test
++import tr.borsatakip.v5.data.ViopHistoryIntegrityPolicy
++import tr.borsatakip.v5.model.Candle
++
++class ViopScannerLiquidityIntegrationTest {
++    private fun resolve(qoi: Long?, coi: Long?) = ViopLiquidityInputPolicy.resolve(
++        quoteVolume = 10.0,
++        contractVolume = null,
++        lastClosedBarVolume = null,
++        quoteOpenInterest = qoi,
++        contractOpenInterest = coi,
++        minVolume = ViopScanner.MIN_VOLUME,
++        minOpenInterest = ViopScanner.MIN_OPEN_INTEREST
++    )
++
++    @Test fun policy_oi_availability_matches_contract_fallback_edge_case() {
++        val liquidityInputs = resolve(qoi = 0L, coi = 100L)
++        assertEquals(100L, liquidityInputs.openInterest)
++        assertTrue(liquidityInputs.openInterestAvailable)
++        assertNull(liquidityInputs.rejectCode)
++    }
++
++    @Test fun unclosed_last_bar_can_never_be_used_as_liquidity_fallback() {
++        val now = 1_700_000_000_000L
++        val openDailyBar = Candle(
++            timestamp = now - 60_000L,
++            open = 100.0,
++            high = 101.0,
++            low = 99.0,
++            close = 100.5,
++            volume = 500.0
++        )
++        assertNotNull(
++            ViopHistoryIntegrityPolicy.validateLastBarClosed(
++                candles = listOf(openDailyBar),
++                nowMs = now,
++                interval = "1d"
++            )
++        )
++    }
++}
