@@ -58,8 +58,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git ls-files --error-unmatch .ci/v611-viop-liquidity-overlay.b64 >/dev/null
+          git hash-object .ci/v611-viop-liquidity-overlay.b64
           base64 -d .ci/v611-viop-liquidity-overlay.b64 > /tmp/viop-overlay.tar.xz
-          echo '98aaa1547ba93dae8b2855c067d324eae38b4bfc4209ac9dd8ae292a2f93e783  /tmp/viop-overlay.tar.xz' | sha256sum -c -
+          sha256sum /tmp/viop-overlay.tar.xz
+          xz -t /tmp/viop-overlay.tar.xz
           tar -tJf /tmp/viop-overlay.tar.xz
           tar -xJf /tmp/viop-overlay.tar.xz -C release-src
 
