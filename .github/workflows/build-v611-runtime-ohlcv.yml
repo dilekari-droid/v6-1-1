@@ -223,7 +223,7 @@ jobs:
           ext_sha_check "$SRC/ui/MainActivity.kt" 'f57d10607b06d2d62d5c807050750da0f33fb937'
           ext_sha_check "$SRC/ui/MarketInstrumentDetailActivity.kt" '7d0e45d3196df78f0997ecb941a3830bc2e5a218'
           ext_sha_check "$SRC/ui/SettingsDetailActivity.kt" '150dfe18c85163a1238c2b5cb7860585e5aee334'
-          ext_sha_check "$SRC/ui/ViopActivity.kt" '274c16abf7fa1feb80d2e734c0b1e95558754c2d'
+          ext_sha_check "$SRC/ui/ViopActivity.kt" '69f965a7377264b7005bc49bfe5023a65ba42080'
           ext_sha_check "$FILTER_LAYOUT" '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
           ext_sha_check "$STRINGS" 'aede467ab21340779ad1086cc6d1e6b580692248'
           ext_sha_check "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt" 'c744fed261a5d421177d56356bee0d53985061fd'
