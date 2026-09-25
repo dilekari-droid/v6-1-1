@@ -185,6 +185,14 @@ jobs:
           echo "V3_DETAIL_LAYOUT_SHA=$(git hash-object "$DETAIL_LAYOUT")"
           echo "V3_TEST_SHA=$(git hash-object "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt")"
 
+          test "$(git hash-object "$SRC/data/ExternalMarketQuotePolicy.kt")" = '89bbde1562c0b2d6d92dfe0cf4841ec81389bbdc'
+          test "$(git hash-object "$SRC/data/ExternalMarketQuoteService.kt")" = '2d20afbf6f88e989a50a7e880e8984be470d1127'
+          test "$(git hash-object "$SRC/ui/MainActivity.kt")" = '43ab084aba39918a3aeb9288152c83dd6b187651'
+          test "$(git hash-object "$SRC/ui/MarketInstrumentDetailActivity.kt")" = '557f0123446bf38c6ffb4c05f8f6ed5c69ae3a07'
+          test "$(git hash-object "$SRC/ui/ViopActivity.kt")" = 'bd08ba8b54fa40684f0dfa8218463bf8b4f6d546'
+          test "$(git hash-object "$DETAIL_LAYOUT")" = 'dcefe0fa13a24770f337ba0106adb45a642e6ca3'
+          test "$(git hash-object "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt")" = '6559712f9ed738fb1b8797029c8966a7b4292524'
+
           echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + proven UIUX-V6 chain + runtime/OHLCV overlay 464da8f9 + network resilience 4d07a4c9 + external market V2 aeb8ae73 + external market V3 correctness f1793837' >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
