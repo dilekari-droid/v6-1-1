@@ -43,8 +43,10 @@ jobs:
           mkdir -p release-src
           unzip -q /tmp/base-artifact/V6.1.1-HOME-DIRECTION-SORT-SOURCE.zip -d release-src
           base64 -d .ci/v611-viop-liquidity-overlay.b64 > /tmp/liquidity-overlay.tar.xz
+          rm -rf /tmp/liquidity-overlay
+          mkdir -p /tmp/liquidity-overlay
           tar -xJf /tmp/liquidity-overlay.tar.xz -C /tmp/liquidity-overlay
-        
+
       - name: Apply verified liquidity overlay
         shell: bash
         run: |
@@ -57,6 +59,7 @@ jobs:
             rsync -a /tmp/liquidity-overlay/app/ release-src/android/app/
           else
             echo 'Unknown liquidity overlay root' >&2
+            find /tmp/liquidity-overlay -maxdepth 6 -type f -print >&2
             exit 1
           fi
           cp -a release-src /tmp/release-before-oi-propagation
