@@ -65,12 +65,12 @@ jobs:
             find /tmp/viop-overlay -maxdepth 6 -type f -print >&2
             exit 1
           fi
-          POLICY='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopLiquidityPolicy.kt'
-          TEST='release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityPolicyTest.kt'
+          POLICY='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicy.kt'
+          TEST='release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/ViopLiquidityInputPolicyTest.kt'
           SCANNER='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt'
           test -f "$POLICY"
           test -f "$TEST"
-          grep -Fq 'ViopLiquidityPolicy' "$SCANNER"
+          grep -Fq 'ViopLiquidityInputPolicy' "$SCANNER"
           grep -Fq 'openInterest' "$POLICY"
           grep -Fq 'volume' "$POLICY"
           echo 'VIOP_LIQUIDITY_OVERLAY=PASS'
