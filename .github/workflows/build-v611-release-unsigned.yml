@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build-v611-release-unsigned.yml'
       - '.ci/v611-scan-long-short-overlay.b64'
+      - '.ci/v611-home-live-overlay.part*'
   workflow_dispatch:
 
 permissions:
@@ -20,6 +21,7 @@ jobs:
       BORSA_EXTERNAL_SIGNING: '1'
       BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
       BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+
     steps:
       - name: Checkout pipeline repository
         uses: actions/checkout@v4
@@ -43,10 +45,11 @@ jobs:
           unzip -q /tmp/final-closure/V6.1.1-FINAL-CLOSURE-SOURCE.zip -d "$GITHUB_WORKSPACE/release-src"
           test -f "$GITHUB_WORKSPACE/release-src/android/app/build.gradle.kts"
 
-      - name: Apply production release and LONG SHORT source hardening
+      - name: Apply production release, LONG SHORT and home-live hardening
         shell: bash
         run: |
           set -euo pipefail
+
           python - <<'PY'
           from pathlib import Path
           p = Path('release-src/android/app/build.gradle.kts')
@@ -82,14 +85,38 @@ jobs:
           grep -Fq 'row("C", 90, 80, 70)' "$TEST_FILE"
           grep -Fq 'row("D", 90, 80, 80)' "$TEST_FILE"
 
+          cat \
+            "$GITHUB_WORKSPACE/.ci/v611-home-live-overlay.part00" \
+            "$GITHUB_WORKSPACE/.ci/v611-home-live-overlay.part01" \
+            "$GITHUB_WORKSPACE/.ci/v611-home-live-overlay.part02" \
+            "$GITHUB_WORKSPACE/.ci/v611-home-live-overlay.part03" \
+            | base64 -d > /tmp/v611-home-live-overlay.tar.xz
+          echo '70d0330ac9efe73e7b292ec84273f1be1a62667cba55c9f1ebd946ab2a97f61d  /tmp/v611-home-live-overlay.tar.xz' | sha256sum -c -
+          xz --test /tmp/v611-home-live-overlay.tar.xz
+          tar -xJf /tmp/v611-home-live-overlay.tar.xz -C release-src/android
+
           test -f release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ScanDirectionPolicy.kt
-          test -f release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/ScanDirectionPolicyTest.kt
+          test -f release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/HomeRealtimeSignalPolicy.kt
+          test -f release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/HomeRealtimeSignalPolicyTest.kt
           grep -Fq 'findViewById<Button>(R.id.scanLong).text = "🟢 LONG"' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           grep -Fq 'findViewById<Button>(R.id.scanShort).text = "🔴 SHORT"' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           grep -Fq 'ScanDirectionPolicy.classify(item)' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           grep -Fq 'ScanDirectionPolicy.classify(it).strength' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultSortPolicy.kt
           ! grep -Fq 'findViewById<Button>(R.id.scanLong).visibility = View.GONE' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           ! grep -Fq 'findViewById<Button>(R.id.scanShort).visibility = View.GONE' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
+
+          MAIN='release-src/android/app/src/main/java/tr/borsatakip/v5/MainActivity.kt'
+          ALERT='release-src/android/app/src/main/java/tr/borsatakip/v5/service/RealtimeAlertService.kt'
+          VIOP='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt'
+          ORCH='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ScanOrchestrator.kt'
+          grep -Fq 'setupHomeLiveUpdates()' "$MAIN"
+          grep -Fq 'refreshViop30Signal()' "$MAIN"
+          grep -Fq 'pulseSignal' "$MAIN"
+          grep -Fq 'HOME_MARKET_REFRESH_MS = 30_000L' "$MAIN"
+          grep -Fq 'ManualScanResultRepository.publish' "$ALERT"
+          grep -Fq 'suspend fun scanContract(contract: ViopContract)' "$VIOP"
+          grep -Fq 'suspend fun runViopContract(contract: ViopContract)' "$ORCH"
+
           python - <<'PY'
           from pathlib import Path
           s = Path('release-src/android/app/src/main/res/layout/activity_scan_results.xml').read_text()
@@ -113,6 +140,7 @@ jobs:
           gradle --no-daemon --stacktrace clean testReleaseUnitTest assembleRelease
           EOF
           chmod +x release-src/android/tools/build-release.sh
+
           mkdir -p out
           (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-RELEASE-SOURCE.zip" android -x 'android/.gradle/*' 'android/**/build/*')
           sha256sum out/V6.1.1-RELEASE-SOURCE.zip | tee out/V6.1.1-RELEASE-SOURCE.zip.sha256
@@ -159,7 +187,7 @@ jobs:
           cp "$BUILD_TOOLS/lib/apksigner.jar" out/apksigner/lib/apksigner.jar
           chmod +x out/apksigner/apksigner
           sha256sum out/V6.1.1-release-unsigned-aligned.apk | tee out/V6.1.1-release-unsigned-aligned.apk.sha256
-          printf 'UNSIGNED_RELEASE=PASS\nDEBUGGABLE=NO\nPACKAGE=tr.borsatakip.v5\nVERSION_CODE=611\nVERSION_NAME=6.1.1\nSCAN_LONG_SHORT_OVERLAY=PASS\nFILTER_ORDER=TUM|85+T|TEKN|LONG|SHORT\nDIRECTION_SORT=DISPLAY_STRENGTH_DESC\n' > out/V6.1.1-unsigned-release-verification.txt
+          printf 'UNSIGNED_RELEASE=PASS\nDEBUGGABLE=NO\nPACKAGE=tr.borsatakip.v5\nVERSION_CODE=611\nVERSION_NAME=6.1.1\nSCAN_LONG_SHORT_OVERLAY=PASS\nFILTER_ORDER=TUM|85+T|TEKN|LONG|SHORT\nDIRECTION_SORT=DISPLAY_STRENGTH_DESC\nHOME_LIVE_STATE=PASS\nVIOP30_QUOTE_REFRESH=30S_FOREGROUND\nVIOP30_SIGNAL_REFRESH=SCAN_CADENCE_FOREGROUND\nSIGNAL_PULSE=MEANINGFUL_CHANGE_ONLY\n' > out/V6.1.1-unsigned-release-verification.txt
 
       - name: Upload unsigned release package
         uses: actions/upload-artifact@v4
