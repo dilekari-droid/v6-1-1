@@ -105,10 +105,10 @@ jobs:
           ! grep -Fq 'findViewById<Button>(R.id.scanLong).visibility = View.GONE' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           ! grep -Fq 'findViewById<Button>(R.id.scanShort).visibility = View.GONE' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
 
-          MAIN='release-src/android/app/src/main/java/tr/borsatakip/v5/MainActivity.kt'
-          ALERT='release-src/android/app/src/main/java/tr/borsatakip/v5/service/RealtimeAlertService.kt'
+          MAIN='release-src/android/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt'
+          ALERT='release-src/android/app/src/main/java/tr/borsatakip/v5/worker/RealtimeAlertService.kt'
           VIOP='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt'
-          ORCH='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ScanOrchestrator.kt'
+          ORCH='release-src/android/app/src/main/java/tr/borsatakip/v5/scan/ScanOrchestrator.kt'
           grep -Fq 'setupHomeLiveUpdates()' "$MAIN"
           grep -Fq 'refreshViop30Signal()' "$MAIN"
           grep -Fq 'pulseSignal' "$MAIN"
