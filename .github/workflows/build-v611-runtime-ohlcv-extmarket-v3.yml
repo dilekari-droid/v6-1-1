@@ -1,0 +1,230 @@
+name: V6.1.1 Runtime OHLCV External Market V3 Verified APK Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.ci/v611-runtime-ohlcv-v611/**'
+      - '.ci/v611-runtime-network-resilience.py'
+      - '.ci/v611-external-market-v2/**'
+      - '.ci/v611-external-market-v3-fix.py'
+      - '.ci/v611-uiux-v6-fixes.py'
+      - '.ci/v611-uiux-v6-copy-fixes.py'
+      - '.ci/v611-uiux-v6-favorites-failclosed.py'
+      - '.ci/v611-uiux-v6-state-failclosed.py'
+      - '.ci/v611-overlay-r3/**'
+      - '.github/workflows/build-v611-runtime-ohlcv-extmarket-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-test-build-v3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout V6.1.1 payload repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned V5 Android base
+        uses: actions/checkout@v4
+        with:
+          repository: dilekari-droid/v5.1.1
+          ref: 28c18f669970f5a7621e89b80179c63c94b6f7aa
+          path: base-v5
+
+      - name: Reconstruct verified V6.1.1 source chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_DIR="$GITHUB_WORKSPACE/base-v5/android"
+
+          R3_ROOT='.ci/v611-overlay-r3'
+          : > /tmp/v611-overlay.b64
+          for part in part00.b64 part01.b64 part02.b64 part03.b64 part04.b64 part05a.b64 part05b.b64 part06a.b64 part06b.b64 part07a.b64 part07b.b64 part08a.b64 part08b.b64 part09.b64; do
+            test -s "$R3_ROOT/$part"
+            cat "$R3_ROOT/$part" >> /tmp/v611-overlay.b64
+          done
+          test "$(wc -c < /tmp/v611-overlay.b64)" -eq 73804
+          base64 -d /tmp/v611-overlay.b64 > /tmp/v611-overlay.tar.xz
+          echo '29989105d1adb64dcd6fb4a514f803adebfd693b07fe3ddbfe775127751e04fc  /tmp/v611-overlay.tar.xz' | sha256sum -c -
+          xz --test /tmp/v611-overlay.tar.xz
+          tar -xJf /tmp/v611-overlay.tar.xz -C "$ANDROID_DIR"
+          test -f "$ANDROID_DIR/DELETE-LIST.txt"
+          while IFS= read -r rel; do test -n "$rel" || continue; rm -f -- "$ANDROID_DIR/$rel"; done < "$ANDROID_DIR/DELETE-LIST.txt"
+          rm -f "$ANDROID_DIR/DELETE-LIST.txt"
+
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-fixes.py" "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-copy-fixes.py" "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-favorites-failclosed.py" "$ANDROID_DIR"
+          python "$GITHUB_WORKSPACE/.ci/v611-uiux-v6-state-failclosed.py" "$ANDROID_DIR"
+
+          RT_ROOT='.ci/v611-runtime-ohlcv-v611'
+          : > /tmp/v611-runtime-ohlcv.b64
+          for n in 00 01 02 03 04 05 06 07 08 09; do
+            test -s "$RT_ROOT/part${n}.b64"
+            cat "$RT_ROOT/part${n}.b64" >> /tmp/v611-runtime-ohlcv.b64
+          done
+          test "$(wc -c < /tmp/v611-runtime-ohlcv.b64)" -eq 58080
+          base64 -d /tmp/v611-runtime-ohlcv.b64 > /tmp/v611-runtime-ohlcv.tar.xz
+          echo '464da8f9c532fdd58e23df939e7fed0119b71908bdd8a2f073c0563164f56b06  /tmp/v611-runtime-ohlcv.tar.xz' | sha256sum -c -
+          xz --test /tmp/v611-runtime-ohlcv.tar.xz
+          tar -xJf /tmp/v611-runtime-ohlcv.tar.xz -C "$ANDROID_DIR"
+
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ.get('GITHUB_WORKSPACE', '.')) / 'base-v5/android/app/src/main/java/tr/borsatakip/v5/ui/StockDetailActivity.kt'
+          s = p.read_text()
+          old = '''                chartStatus.text = "${timeframe.label}: gerçek OHLCV verisi alınamadı • ${error.message ?: error.javaClass.simpleName}"
+                          trendInfoPanel.text = "Trend analizi için yeterli veri yok."'''
+          new = '''                android.util.Log.w("StockDetailActivity", "Chart load failed for ${timeframe.label}", error)
+                          chartStatus.text = "${timeframe.label}: gerçek OHLCV verisi alınamadı. Veri sağlayıcı durumunu kontrol edin."
+                          trendInfoPanel.text = "Trend analizi için yeterli veri yok."'''
+          if s.count(old) != 1:
+              raise SystemExit(f'StockDetail runtime error-copy pattern count={s.count(old)}')
+          s = s.replace(old, new, 1)
+          old2 = '    private fun money(v:Double)=if(v.isFinite())"%.2f TL".format(v) else "Veri yok"'
+          new2 = '    private fun money(v:Double)=if(v.isFinite() && v > 0.0)"%.2f TL".format(v) else "Veri yok"'
+          if s.count(old2) != 1:
+              raise SystemExit(f'StockDetail money gate pattern count={s.count(old2)}')
+          p.write_text(s.replace(old2, new2, 1))
+          PY
+
+          python "$GITHUB_WORKSPACE/.ci/v611-runtime-network-resilience.py" "$ANDROID_DIR"
+
+          EXT_V2_ROOT="$GITHUB_WORKSPACE/.ci/v611-external-market-v2"
+          : > /tmp/v611-external-market-v2.patch
+          for n in 00 01 02 03 04; do
+            test -s "$EXT_V2_ROOT/part${n}.patch"
+            cat "$EXT_V2_ROOT/part${n}.patch" >> /tmp/v611-external-market-v2.patch
+          done
+          test "$(wc -c < /tmp/v611-external-market-v2.patch)" -eq 50237
+          echo 'aeb8ae7309e206a9b9b8d4ad5deb0a399b8497d234a0886ba5bc1c7905e118f7  /tmp/v611-external-market-v2.patch' | sha256sum -c -
+          (cd "$ANDROID_DIR" && patch --dry-run -p1 < /tmp/v611-external-market-v2.patch)
+          (cd "$ANDROID_DIR" && patch -p1 < /tmp/v611-external-market-v2.patch)
+
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ.get('GITHUB_WORKSPACE', '.')) / 'base-v5/android/app/src/main/res/values/strings.xml'
+          s = p.read_text()
+          for old, new in {
+              '>LONG<': '>↗ LONG<',
+              '>SHORT<': '>↘ SHORT<',
+              '>85+ GÜÇLÜ<': '>85+ TEKNİK<',
+              '>SKORA GÖRE<': '>TEKNİK PUAN<',
+          }.items():
+              if s.count(old) != 1:
+                  raise SystemExit(f'filter string pattern count={s.count(old)} pattern={old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+
+      - name: Verify V2 source gates before V3
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
+          TESTSRC="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5"
+          STRINGS="$ANDROID_DIR/app/src/main/res/values/strings.xml"
+          FILTER_LAYOUT="$ANDROID_DIR/app/src/main/res/layout/activity_scan_results.xml"
+
+          grep -q 'versionCode = 611' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -q 'versionName = "6.1.1"' "$ANDROID_DIR/app/build.gradle.kts"
+          grep -Fq 'https://borsa-takip-backend-live-production.up.railway.app' "$ANDROID_DIR/app/build.gradle.kts"
+          ! grep -R -E 'btk_[A-Za-z0-9]{20,}' "$ANDROID_DIR/app/src" "$ANDROID_DIR/app/build.gradle.kts"
+          test "$(git hash-object "$SRC/data/ExternalMarketQuotePolicy.kt")" = '3f2a7550652e8ce78917f7ee4674550028910b83'
+          test "$(git hash-object "$SRC/data/ExternalMarketQuoteService.kt")" = '87c29851c1cc6e21a6942a92672272ff8b3154cd'
+          test "$(git hash-object "$SRC/ui/MainActivity.kt")" = 'f57d10607b06d2d62d5c807050750da0f33fb937'
+          test "$(git hash-object "$SRC/ui/MarketInstrumentDetailActivity.kt")" = '7d0e45d3196df78f0997ecb941a3830bc2e5a218'
+          test "$(git hash-object "$SRC/ui/ViopActivity.kt")" = '69f965a7377264b7005bc49bfe5023a65ba42080'
+          test "$(git hash-object "$FILTER_LAYOUT")" = '1c6e0c2e342a074136e7918baf8de2ffa173c45b'
+          test "$(git hash-object "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt")" = 'c744fed261a5d421177d56356bee0d53985061fd'
+          grep -Fq 'load(forceExternalRefresh = true)' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'SON BAŞARILI VERİ' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'Birincil sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'Yedek sağlayıcı' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'MEMO_TTL_MS = 15_000L' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'android:weightSum="5"' "$FILTER_LAYOUT"
+          grep -Fq 'Mode.LONG -> R.color.green' "$SRC/ui/ScanResultsActivity.kt"
+          grep -Fq 'Mode.SHORT -> R.color.red' "$SRC/ui/ScanResultsActivity.kt"
+          grep -Fq '↗ LONG' "$STRINGS"
+          grep -Fq '↘ SHORT' "$STRINGS"
+          grep -Fq '85+ TEKNİK' "$STRINGS"
+          grep -Fq 'TEKNİK PUAN' "$STRINGS"
+
+      - name: Apply and verify external market V3 correctness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "$GITHUB_WORKSPACE/.ci/v611-external-market-v3-fix.py" "$ANDROID_DIR"
+          SRC="$ANDROID_DIR/app/src/main/java/tr/borsatakip/v5"
+          TESTSRC="$ANDROID_DIR/app/src/test/java/tr/borsatakip/v5"
+          DETAIL_LAYOUT="$ANDROID_DIR/app/src/main/res/layout/activity_market_instrument_detail.xml"
+
+          grep -Fq 'filterProviderTickers(symbol, providerTickers)' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'FORCE_REFRESH_MIN_INTERVAL_MS = 2_000L' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq 'FORCE_REFRESH_THROTTLED' "$SRC/data/ExternalMarketQuoteService.kt"
+          grep -Fq '"XAUUSD" -> setOf("XAUUSD=X")' "$SRC/data/ExternalMarketQuotePolicy.kt"
+          ! grep -Fq 'GC=F' "$SRC/ui/MainActivity.kt"
+          ! grep -Fq 'GC=F' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          ! grep -Fq 'GC=F' "$SRC/ui/ViopActivity.kt"
+          grep -Fq 'SettingsDetailActivity.MODE_DATA_CONNECTION' "$SRC/ui/MarketInstrumentDetailActivity.kt"
+          grep -Fq 'VERİ SAĞLAYICILARINI AYARLA' "$DETAIL_LAYOUT"
+          grep -Fq 'providerTickerAllowlistNeverSubstitutesGoldFutureForSpotOunce' "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt"
+
+          echo "V3_POLICY_SHA=$(git hash-object "$SRC/data/ExternalMarketQuotePolicy.kt")"
+          echo "V3_SERVICE_SHA=$(git hash-object "$SRC/data/ExternalMarketQuoteService.kt")"
+          echo "V3_MAIN_SHA=$(git hash-object "$SRC/ui/MainActivity.kt")"
+          echo "V3_DETAIL_SHA=$(git hash-object "$SRC/ui/MarketInstrumentDetailActivity.kt")"
+          echo "V3_VIOP_SHA=$(git hash-object "$SRC/ui/ViopActivity.kt")"
+          echo "V3_DETAIL_LAYOUT_SHA=$(git hash-object "$DETAIL_LAYOUT")"
+          echo "V3_TEST_SHA=$(git hash-object "$TESTSRC/data/ExternalMarketQuotePolicyTest.kt")"
+
+          echo 'SELECTED_SOURCE=v5.1.1@28c18f669970f5a7621e89b80179c63c94b6f7aa + verified V6.1.1 R3 overlay + proven UIUX-V6 chain + runtime/OHLCV overlay 464da8f9 + network resilience 4d07a4c9 + external market V2 aeb8ae73 + external market V3 correctness f1793837' >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run Android unit tests
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
+
+      - name: Build debug APK
+        working-directory: ${{ env.ANDROID_DIR }}
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Locate and verify V3 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "$ANDROID_DIR/app/build/outputs/apk/debug" -type f -name '*.apk' | head -1)"
+          test -n "$APK"
+          mkdir -p out
+          cp "$APK" out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-debug.apk
+          sha256sum out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-debug.apk.sha256
+          printf 'source=%s\n' "$SELECTED_SOURCE" | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-source.txt
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-debug.apk | tee out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-signature.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-badging.txt
+
+      - name: Upload V3 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-RUNTIME-OHLCV-EXTMARKET-V3-APK
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
