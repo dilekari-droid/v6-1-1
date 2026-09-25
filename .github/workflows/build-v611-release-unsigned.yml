@@ -70,7 +70,7 @@ jobs:
           PY
 
           base64 -d "$GITHUB_WORKSPACE/.ci/v611-scan-long-short-overlay.b64" > /tmp/v611-scan-long-short-overlay.tar.xz
-          echo '18391f80472d001821de7d0314cbecc5428fa66166e8c0426c79ee56f5ae7789  /tmp/v611-scan-long-short-overlay.tar.xz' | sha256sum -c -
+          echo 'b289dcf6c1f2181f5280d05b1e27d5653384ad9190638a4d065025affa92820f  /tmp/v611-scan-long-short-overlay.tar.xz' | sha256sum -c -
           xz --test /tmp/v611-scan-long-short-overlay.tar.xz
           tar -xJf /tmp/v611-scan-long-short-overlay.tar.xz -C release-src/android
 
@@ -79,6 +79,7 @@ jobs:
           grep -Fq 'findViewById<Button>(R.id.scanLong).text = "🟢 LONG"' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           grep -Fq 'findViewById<Button>(R.id.scanShort).text = "🔴 SHORT"' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           grep -Fq 'ScanDirectionPolicy.classify(item)' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
+          grep -Fq 'ScanDirectionPolicy.classify(it).strength' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultSortPolicy.kt
           ! grep -Fq 'findViewById<Button>(R.id.scanLong).visibility = View.GONE' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           ! grep -Fq 'findViewById<Button>(R.id.scanShort).visibility = View.GONE' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ScanResultsActivity.kt
           python - <<'PY'
@@ -150,7 +151,7 @@ jobs:
           cp "$BUILD_TOOLS/lib/apksigner.jar" out/apksigner/lib/apksigner.jar
           chmod +x out/apksigner/apksigner
           sha256sum out/V6.1.1-release-unsigned-aligned.apk | tee out/V6.1.1-release-unsigned-aligned.apk.sha256
-          printf 'UNSIGNED_RELEASE=PASS\nDEBUGGABLE=NO\nPACKAGE=tr.borsatakip.v5\nVERSION_CODE=611\nVERSION_NAME=6.1.1\nSCAN_LONG_SHORT_OVERLAY=PASS\nFILTER_ORDER=TUM|85+T|TEKN|LONG|SHORT\n' > out/V6.1.1-unsigned-release-verification.txt
+          printf 'UNSIGNED_RELEASE=PASS\nDEBUGGABLE=NO\nPACKAGE=tr.borsatakip.v5\nVERSION_CODE=611\nVERSION_NAME=6.1.1\nSCAN_LONG_SHORT_OVERLAY=PASS\nFILTER_ORDER=TUM|85+T|TEKN|LONG|SHORT\nDIRECTION_SORT=DISPLAY_STRENGTH_DESC\n' > out/V6.1.1-unsigned-release-verification.txt
 
       - name: Upload unsigned release package
         uses: actions/upload-artifact@v4
