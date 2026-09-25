@@ -1,0 +1,66 @@
+from pathlib import Path
+import base64
+
+root = Path("release-src/android")
+main = root / "app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt"
+s = main.read_text()
+
+import_old = "import tr.borsatakip.v5.analysis.HomeRealtimeSignalPolicy\n"
+import_new = import_old + "import tr.borsatakip.v5.analysis.TodayOpportunitySortPolicy\n"
+if "import tr.borsatakip.v5.analysis.TodayOpportunitySortPolicy" not in s:
+    if s.count(import_old) != 1:
+        raise SystemExit(f"home sort import anchor count={s.count(import_old)}")
+    s = s.replace(import_old, import_new, 1)
+
+old = r'''        val top = filtered
+            .sortedWith(
+                compareByDescending<Opportunity> {
+                    HomeRealtimeSignalPolicy.bistMarker(it)?.strength
+                        ?: OpportunityUiPolicy.strength(it)
+                        ?: it.rankingScore
+                }.thenBy { it.riskScore }
+            )
+            .take(8)
+'''
+new = r'''        val top = TodayOpportunitySortPolicy.sort(
+            items = filtered,
+            mode = when (todayMode) {
+                TodayMode.ALL -> TodayOpportunitySortPolicy.Mode.ALL
+                TodayMode.LONG -> TodayOpportunitySortPolicy.Mode.LONG
+                TodayMode.SHORT -> TodayOpportunitySortPolicy.Mode.SHORT
+            }
+        ).take(8)
+'''
+if old not in s and "TodayOpportunitySortPolicy.sort(" not in s:
+    raise SystemExit("home sort block anchor not found")
+if old in s:
+    s = s.replace(old, new, 1)
+main.write_text(s)
+
+def write_b64(path: Path, payload: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(base64.b64decode(payload))
+
+write_b64(root / "app/src/main/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicy.kt", "cGFja2FnZSB0ci5ib3JzYXRha2lwLnY1LmFuYWx5c2lzCgppbXBvcnQgdHIuYm9yc2F0YWtpcC52NS5tb2RlbC5PcHBvcnR1bml0eQppbXBvcnQgdHIuYm9yc2F0YWtpcC52NS51aS5PcHBvcnR1bml0eVVpUG9saWN5CgovKioKICogSG9tZSAiR8O8bsO8biBGxLFyc2F0bGFyxLEiIG9yZGVyaW5nIG9ubHkuCiAqCiAqIEFMTCBkZWxpYmVyYXRlbHkgcHJlc2VydmVzIHRoZSBwcmUtZXhpc3RpbmcgaG9tZSBvcmRlcmluZy4gTE9ORy9TSE9SVCBvbmx5CiAqIGNoYW5nZSBvcmRlcmluZyBpbnNpZGUgdGhlaXIgYWxyZWFkeSBmYWlsLWNsb3NlZCByZWFsdGltZSBmaWx0ZXJlZCBsaXN0cy4KICogU2lnbmFsIGdlbmVyYXRpb24sIHB1YmxpY2F0aW9uIGdhdGVzIGFuZCBmaWx0ZXJpbmcgYXJlIG5vdCBtb2RpZmllZCBoZXJlLgogKi8Kb2JqZWN0IFRvZGF5T3Bwb3J0dW5pdHlTb3J0UG9saWN5IHsKICAgIGVudW0gY2xhc3MgTW9kZSB7IEFMTCwgTE9ORywgU0hPUlQgfQoKICAgIHByaXZhdGUgdmFsIGFsbENvbXBhcmF0b3I6IENvbXBhcmF0b3I8T3Bwb3J0dW5pdHk+ID0KICAgICAgICBjb21wYXJlQnlEZXNjZW5kaW5nPE9wcG9ydHVuaXR5PiB7CiAgICAgICAgICAgIEhvbWVSZWFsdGltZVNpZ25hbFBvbGljeS5iaXN0TWFya2VyKGl0KT8uc3RyZW5ndGgKICAgICAgICAgICAgICAgID86IE9wcG9ydHVuaXR5VWlQb2xpY3kuc3RyZW5ndGgoaXQpCiAgICAgICAgICAgICAgICA/OiBpdC5yYW5raW5nU2NvcmUKICAgICAgICB9LnRoZW5CeSB7IGl0LnJpc2tTY29yZSB9CgogICAgcHJpdmF0ZSB2YWwgbG9uZ0NvbXBhcmF0b3I6IENvbXBhcmF0b3I8T3Bwb3J0dW5pdHk+ID0KICAgICAgICBjb21wYXJlQnlEZXNjZW5kaW5nPE9wcG9ydHVuaXR5PiB7IGl0LmFuYWx5c2lzTG9uZ1Njb3JlIH0KICAgICAgICAgICAgLnRoZW5CeURlc2NlbmRpbmcgeyBpdC5maW5hbFNpZ25hbFNjb3JlIH0KICAgICAgICAgICAgLnRoZW5CeURlc2NlbmRpbmcgeyBpdC5kYXRhQ29uZmlkZW5jZVNjb3JlIH0KICAgICAgICAgICAgLnRoZW5CeSB7IGl0LnJpc2tTY29yZSB9CiAgICAgICAgICAgIC50aGVuQnkgeyBpdC5zeW1ib2wgfQoKICAgIHByaXZhdGUgdmFsIHNob3J0Q29tcGFyYXRvcjogQ29tcGFyYXRvcjxPcHBvcnR1bml0eT4gPQogICAgICAgIGNvbXBhcmVCeURlc2NlbmRpbmc8T3Bwb3J0dW5pdHk+IHsgaXQuYW5hbHlzaXNTaG9ydFNjb3JlIH0KICAgICAgICAgICAgLnRoZW5CeURlc2NlbmRpbmcgeyBpdC5maW5hbFNpZ25hbFNjb3JlIH0KICAgICAgICAgICAgLnRoZW5CeURlc2NlbmRpbmcgeyBpdC5kYXRhQ29uZmlkZW5jZVNjb3JlIH0KICAgICAgICAgICAgLnRoZW5CeSB7IGl0LnJpc2tTY29yZSB9CiAgICAgICAgICAgIC50aGVuQnkgeyBpdC5zeW1ib2wgfQoKICAgIGZ1biBzb3J0KGl0ZW1zOiBMaXN0PE9wcG9ydHVuaXR5PiwgbW9kZTogTW9kZSk6IExpc3Q8T3Bwb3J0dW5pdHk+ID0gd2hlbiAobW9kZSkgewogICAgICAgIE1vZGUuQUxMIC0+IGl0ZW1zLnNvcnRlZFdpdGgoYWxsQ29tcGFyYXRvcikKICAgICAgICBNb2RlLkxPTkcgLT4gaXRlbXMuc29ydGVkV2l0aChsb25nQ29tcGFyYXRvcikKICAgICAgICBNb2RlLlNIT1JUIC0+IGl0ZW1zLnNvcnRlZFdpdGgoc2hvcnRDb21wYXJhdG9yKQogICAgfQp9Cg==")
+write_b64(root / "app/src/test/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicyTest.kt", "cGFja2FnZSB0ci5ib3JzYXRha2lwLnY1LmFuYWx5c2lzCgppbXBvcnQgb3JnLmp1bml0LkFzc2VydC5hc3NlcnRFcXVhbHMKaW1wb3J0IG9yZy5qdW5pdC5UZXN0CmltcG9ydCB0ci5ib3JzYXRha2lwLnY1Lm1vZGVsLkNhbmRsZQppbXBvcnQgdHIuYm9yc2F0YWtpcC52NS5tb2RlbC5PcHBvcnR1bml0eQppbXBvcnQgdHIuYm9yc2F0YWtpcC52NS5tb2RlbC5UZWNobmljYWxTbmFwc2hvdAoKY2xhc3MgVG9kYXlPcHBvcnR1bml0eVNvcnRQb2xpY3lUZXN0IHsKICAgIEBUZXN0CiAgICBmdW4gbG9uZ19vcmRlcnNfYnlfYW5hbHlzaXNMb25nU2NvcmVfYmVmb3JlX2dlbmVyYWxfcmFua2luZygpIHsKICAgICAgICB2YWwgYSA9IHJvdygiQSIsIGxvbmcgPSA5MSwgc2hvcnQgPSAyMCwgZmluYWwgPSA5MSwgY29uZmlkZW5jZSA9IDgwLCByYW5raW5nID0gODIpCiAgICAgICAgdmFsIGIgPSByb3coIkIiLCBsb25nID0gODYsIHNob3J0ID0gMTAsIGZpbmFsID0gODYsIGNvbmZpZGVuY2UgPSA5MCwgcmFua2luZyA9IDk1KQoKICAgICAgICB2YWwgc29ydGVkID0gVG9kYXlPcHBvcnR1bml0eVNvcnRQb2xpY3kuc29ydChsaXN0T2YoYiwgYSksIFRvZGF5T3Bwb3J0dW5pdHlTb3J0UG9saWN5Lk1vZGUuTE9ORykKCiAgICAgICAgYXNzZXJ0RXF1YWxzKGxpc3RPZigiQSIsICJCIiksIHNvcnRlZC5tYXAgeyBpdC5zeW1ib2wgfSkKICAgIH0KCiAgICBAVGVzdAogICAgZnVuIHNob3J0X29yZGVyc19ieV9hbmFseXNpc1Nob3J0U2NvcmVfYmVmb3JlX2dlbmVyYWxfcmFua2luZygpIHsKICAgICAgICB2YWwgeCA9IHJvdygiWCIsIGxvbmcgPSAxMCwgc2hvcnQgPSA5NSwgZmluYWwgPSA5NSwgY29uZmlkZW5jZSA9IDgwLCByYW5raW5nID0gODApCiAgICAgICAgdmFsIHkgPSByb3coIlkiLCBsb25nID0gMjAsIHNob3J0ID0gODksIGZpbmFsID0gODksIGNvbmZpZGVuY2UgPSA5NSwgcmFua2luZyA9IDk5KQoKICAgICAgICB2YWwgc29ydGVkID0gVG9kYXlPcHBvcnR1bml0eVNvcnRQb2xpY3kuc29ydChsaXN0T2YoeSwgeCksIFRvZGF5T3Bwb3J0dW5pdHlTb3J0UG9saWN5Lk1vZGUuU0hPUlQpCgogICAgICAgIGFzc2VydEVxdWFscyhsaXN0T2YoIlgiLCAiWSIpLCBzb3J0ZWQubWFwIHsgaXQuc3ltYm9sIH0pCiAgICB9CgogICAgQFRlc3QKICAgIGZ1biBsb25nX3RpZV91c2VzX2ZpbmFsX3RoZW5fY29uZmlkZW5jZSgpIHsKICAgICAgICB2YWwgYSA9IHJvdygiQSIsIGxvbmcgPSA5MCwgc2hvcnQgPSAxMCwgZmluYWwgPSA4OCwgY29uZmlkZW5jZSA9IDgwKQogICAgICAgIHZhbCBiID0gcm93KCJCIiwgbG9uZyA9IDkwLCBzaG9ydCA9IDEwLCBmaW5hbCA9IDkyLCBjb25maWRlbmNlID0gNjApCiAgICAgICAgdmFsIGMgPSByb3coIkMiLCBsb25nID0gOTAsIHNob3J0ID0gMTAsIGZpbmFsID0gOTIsIGNvbmZpZGVuY2UgPSA5MCkKCiAgICAgICAgdmFsIHNvcnRlZCA9IFRvZGF5T3Bwb3J0dW5pdHlTb3J0UG9saWN5LnNvcnQobGlzdE9mKGEsIGIsIGMpLCBUb2RheU9wcG9ydHVuaXR5U29ydFBvbGljeS5Nb2RlLkxPTkcpCgogICAgICAgIGFzc2VydEVxdWFscyhsaXN0T2YoIkMiLCAiQiIsICJBIiksIHNvcnRlZC5tYXAgeyBpdC5zeW1ib2wgfSkKICAgIH0KCiAgICBAVGVzdAogICAgZnVuIHNob3J0X3RpZV91c2VzX2ZpbmFsX3RoZW5fY29uZmlkZW5jZSgpIHsKICAgICAgICB2YWwgYSA9IHJvdygiQSIsIGxvbmcgPSAxMCwgc2hvcnQgPSA5MCwgZmluYWwgPSA4OCwgY29uZmlkZW5jZSA9IDgwKQogICAgICAgIHZhbCBiID0gcm93KCJCIiwgbG9uZyA9IDEwLCBzaG9ydCA9IDkwLCBmaW5hbCA9IDkyLCBjb25maWRlbmNlID0gNjApCiAgICAgICAgdmFsIGMgPSByb3coIkMiLCBsb25nID0gMTAsIHNob3J0ID0gOTAsIGZpbmFsID0gOTIsIGNvbmZpZGVuY2UgPSA5MCkKCiAgICAgICAgdmFsIHNvcnRlZCA9IFRvZGF5T3Bwb3J0dW5pdHlTb3J0UG9saWN5LnNvcnQobGlzdE9mKGEsIGIsIGMpLCBUb2RheU9wcG9ydHVuaXR5U29ydFBvbGljeS5Nb2RlLlNIT1JUKQoKICAgICAgICBhc3NlcnRFcXVhbHMobGlzdE9mKCJDIiwgIkIiLCAiQSIpLCBzb3J0ZWQubWFwIHsgaXQuc3ltYm9sIH0pCiAgICB9CgogICAgcHJpdmF0ZSBmdW4gcm93KAogICAgICAgIHN5bWJvbDogU3RyaW5nLAogICAgICAgIGxvbmc6IEludCwKICAgICAgICBzaG9ydDogSW50LAogICAgICAgIGZpbmFsOiBJbnQsCiAgICAgICAgY29uZmlkZW5jZTogSW50LAogICAgICAgIHJhbmtpbmc6IEludCA9IGZpbmFsLAogICAgICAgIHJpc2s6IEludCA9IDQwCiAgICApOiBPcHBvcnR1bml0eSA9IE9wcG9ydHVuaXR5KAogICAgICAgIHN5bWJvbCA9IHN5bWJvbCwKICAgICAgICBjb21wYW55TmFtZSA9IG51bGwsCiAgICAgICAgcHJpY2UgPSAxMDAuMCwKICAgICAgICBkYWlseUNoYW5nZVBjdCA9IDAuMCwKICAgICAgICBzY29yZSA9IGZpbmFsLAogICAgICAgIHJpc2tTY29yZSA9IHJpc2ssCiAgICAgICAgZGlyZWN0aW9uID0gaWYgKGxvbmcgPj0gc2hvcnQpICJMT05HIiBlbHNlICJTSE9SVCIsCiAgICAgICAgdGVjaG5pY2FsTGFiZWwgPSAiIiwKICAgICAgICB2b2x1bWVMYWJlbCA9ICIiLAogICAgICAgIGthcExhYmVsID0gIiIsCiAgICAgICAgbGlxdWlkaXR5TGFiZWwgPSAiIiwKICAgICAgICBzdXBwb3J0ID0gbnVsbCwKICAgICAgICByZXNpc3RhbmNlID0gbnVsbCwKICAgICAgICBzb3VyY2UgPSAiVEVTVCIsCiAgICAgICAgZGF0YVRpbWVzdGFtcCA9IDFMLAogICAgICAgIGNhbmRsZXMgPSBlbXB0eUxpc3Q8Q2FuZGxlPigpLAogICAgICAgIHRlY2huaWNhbCA9IFRlY2huaWNhbFNuYXBzaG90KAogICAgICAgICAgICBlbWEyMCA9IG51bGwsIGVtYTUwID0gbnVsbCwgZW1hMjAwID0gbnVsbCwgcnNpMTQgPSBudWxsLAogICAgICAgICAgICBtYWNkID0gbnVsbCwgbWFjZFNpZ25hbCA9IG51bGwsIGJiVXBwZXIgPSBudWxsLCBiYkxvd2VyID0gbnVsbCwKICAgICAgICAgICAgYXRyMTQgPSBudWxsLCB2d2FwID0gbnVsbCwgdm9sdW1lUmF0aW8gPSBudWxsLCBzdXBwb3J0ID0gbnVsbCwgcmVzaXN0YW5jZSA9IG51bGwKICAgICAgICApLAogICAgICAgIGRhdGFDb25maWRlbmNlU2NvcmUgPSBjb25maWRlbmNlLAogICAgICAgIGZpbmFsU2lnbmFsU2NvcmUgPSBmaW5hbCwKICAgICAgICBsb25nU2NvcmUgPSBsb25nLAogICAgICAgIHNob3J0U2NvcmUgPSBzaG9ydCwKICAgICAgICBhbmFseXNpc0xvbmdTY29yZSA9IGxvbmcsCiAgICAgICAgYW5hbHlzaXNTaG9ydFNjb3JlID0gc2hvcnQsCiAgICAgICAgcmFua2luZ1Njb3JlID0gcmFua2luZwogICAgKQp9Cg==")
+
+ps = (root / "app/src/main/java/tr/borsatakip/v5/analysis/TodayOpportunitySortPolicy.kt").read_text()
+checks = [
+    "Mode.ALL -> items.sortedWith(allComparator)",
+    "Mode.LONG -> items.sortedWith(longComparator)",
+    "Mode.SHORT -> items.sortedWith(shortComparator)",
+    "it.analysisLongScore",
+    "it.analysisShortScore",
+    ".thenByDescending { it.finalSignalScore }",
+    ".thenByDescending { it.dataConfidenceScore }",
+]
+for item in checks:
+    if item not in ps:
+        raise SystemExit(f"missing home sort gate: {item}")
+
+ms = main.read_text()
+if 'HomeRealtimeSignalPolicy.bistMarker(it)?.direction == \"LONG\"' not in ms:
+    raise SystemExit("LONG fail-closed filter changed unexpectedly")
+if 'HomeRealtimeSignalPolicy.bistMarker(it)?.direction == \"SHORT\"' not in ms:
+    raise SystemExit("SHORT fail-closed filter changed unexpectedly")
+print("HOME_TODAY_DIRECTION_SORT=PASS")
