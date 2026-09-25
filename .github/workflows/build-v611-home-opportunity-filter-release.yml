@@ -1,0 +1,148 @@
+name: V6.1.1 Home Opportunity Filter Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-v611-home-opportunity-filter-release.yml'
+      - '.ci/v611-home-opportunity-filter-overlay.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-home-opportunity-filter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BORSA_EXTERNAL_SIGNING: '1'
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+
+    steps:
+      - name: Checkout pipeline repository
+        uses: actions/checkout@v4
+
+      - name: Download verified VIOP E2E source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10866314498/zip' \
+            -o /tmp/base-artifact.zip
+          mkdir -p /tmp/base-artifact
+          unzip -q /tmp/base-artifact.zip -d /tmp/base-artifact
+          echo 'bbab003da93482b0a818417656ce11a0b7b86424e915618f5ccfea3051c2f12d  /tmp/base-artifact/V6.1.1-VIOP-E2E-HARDENING-SOURCE.zip' | sha256sum -c -
+          mkdir -p release-src
+          unzip -q /tmp/base-artifact/V6.1.1-VIOP-E2E-HARDENING-SOURCE.zip -d release-src
+          rm -rf release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__
+          test -f release-src/android/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt
+          test -f release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt
+          test -f release-src/backend_v611/provider_readiness.py
+
+      - name: Snapshot protected source hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-src
+          find android backend_v611 -type f \
+            ! -path 'android/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt' \
+            ! -path 'android/app/src/main/java/tr/borsatakip/v5/analysis/HomeOpportunityFilterPolicy.kt' \
+            ! -path 'android/app/src/test/java/tr/borsatakip/v5/analysis/HomeOpportunityFilterPolicyTest.kt' \
+            ! -path '*/build/*' ! -path '*/.gradle/*' ! -path '*/__pycache__/*' \
+            -print0 | sort -z | xargs -0 sha256sum > /tmp/protected-before.sha256
+
+      - name: Apply isolated home filter overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-home-opportunity-filter-overlay.b64 > /tmp/home-filter-overlay.tar.xz
+          echo '25d83ac32e3fd63edca1d43f90ce7408864be55658ab39e12f3f9966cdb23cd2  /tmp/home-filter-overlay.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/home-filter-overlay.tar.xz -C release-src
+          POLICY='release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/HomeOpportunityFilterPolicy.kt'
+          ACTIVITY='release-src/android/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt'
+          TEST='release-src/android/app/src/test/java/tr/borsatakip/v5/analysis/HomeOpportunityFilterPolicyTest.kt'
+          test -f "$POLICY" && test -f "$ACTIVITY" && test -f "$TEST"
+          grep -Fq 'filterAndSort(sourceItems, todayMode)' "$ACTIVITY"
+          grep -Fq 'STATE_TODAY_FILTER' "$ACTIVITY"
+          grep -Fq 'DataMode.UNVERIFIED' "$POLICY"
+          grep -Fq 'SignalValidity.INSUFFICIENT' "$POLICY"
+          grep -Fq 'long_and_short_never_fall_back_to_all_when_empty' "$TEST"
+          grep -Fq 'unavailable_analysis_is_not_rendered_as_zero_score_opportunity' "$TEST"
+
+      - name: Verify all unrelated source files unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-src
+          find android backend_v611 -type f \
+            ! -path 'android/app/src/main/java/tr/borsatakip/v5/ui/MainActivity.kt' \
+            ! -path 'android/app/src/main/java/tr/borsatakip/v5/analysis/HomeOpportunityFilterPolicy.kt' \
+            ! -path 'android/app/src/test/java/tr/borsatakip/v5/analysis/HomeOpportunityFilterPolicyTest.kt' \
+            ! -path '*/build/*' ! -path '*/.gradle/*' ! -path '*/__pycache__/*' \
+            -print0 | sort -z | xargs -0 sha256sum > /tmp/protected-after.sha256
+          diff -u /tmp/protected-before.sha256 /tmp/protected-after.sha256
+          echo 'UNRELATED_SOURCE_UNCHANGED=PASS'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Test and build unsigned release APK
+        working-directory: release-src/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace testReleaseUnitTest assembleRelease
+
+      - name: Package and verify release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          APK="$(find release-src/android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          test -n "$APK"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$APK" out/V6.1.1-home-opportunity-filter-unsigned-aligned.apk
+          "$BUILD_TOOLS/zipalign" -c -v 4 out/V6.1.1-home-opportunity-filter-unsigned-aligned.apk > out/zipalign.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-home-opportunity-filter-unsigned-aligned.apk > out/badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/badging.txt
+          if grep -q '^application-debuggable$' out/badging.txt; then echo 'release APK is debuggable' >&2; exit 1; fi
+          if "$BUILD_TOOLS/apksigner" verify out/V6.1.1-home-opportunity-filter-unsigned-aligned.apk 2>/dev/null; then echo 'unexpected pre-signature detected' >&2; exit 1; fi
+          (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-HOME-OPPORTUNITY-FILTER-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*')
+          sha256sum out/V6.1.1-home-opportunity-filter-unsigned-aligned.apk out/V6.1.1-HOME-OPPORTUNITY-FILTER-SOURCE.zip > out/SHA256SUMS.txt
+          mkdir -p out/apksigner/lib
+          cp "$BUILD_TOOLS/apksigner" out/apksigner/apksigner
+          cp "$BUILD_TOOLS/lib/apksigner.jar" out/apksigner/lib/apksigner.jar
+          chmod +x out/apksigner/apksigner
+          printf 'HOME_FILTER_STATE=PASS\nLONG_SHORT_FILTER=PASS\nNO_DATA_NOT_ZERO=PASS\nFILTER_EMPTY_NO_FALLBACK=PASS\nROTATION_STATE=PASS\nUNRELATED_SOURCE_UNCHANGED=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nDEBUGGABLE=NO\n' > out/VERIFICATION.txt
+
+      - name: Upload isolated home filter release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-HOME-OPPORTUNITY-FILTER-UNSIGNED-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            out/V6.1.1-home-opportunity-filter-unsigned-aligned.apk
+            out/V6.1.1-HOME-OPPORTUNITY-FILTER-SOURCE.zip
+            out/badging.txt
+            out/zipalign.txt
+            out/SHA256SUMS.txt
+            out/VERIFICATION.txt
+            out/apksigner/apksigner
+            out/apksigner/lib/apksigner.jar
