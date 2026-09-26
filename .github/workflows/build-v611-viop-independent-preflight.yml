@@ -5,6 +5,7 @@ on:
     branches: [ v611-viop-independent-preflight ]
     paths:
       - '.ci/v611-viop-independent-preflight.patch.xz.b64'
+      - '.ci/v611-realtime-capability-reconnect.patch.xz.b64'
       - '.github/workflows/build-v611-viop-independent-preflight.yml'
   workflow_dispatch:
 
@@ -77,6 +78,28 @@ jobs:
           assert 'BIST ✓ • VİOP Contracts' not in readiness
           print('VIOP_BIST_PREFLIGHT_ISOLATION=PASS')
           print('VIOP_FAILURE_DOES_NOT_POISON_BIST_HEALTH=PASS')
+          PY
+
+      - name: Apply realtime capability reconnect hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-realtime-capability-reconnect.patch.xz.b64 > /tmp/realtime-capability.patch.xz
+          echo 'f81f7f6570522f639ec083cc5be8698dd4db05dfab152a329d72beeab5851575  /tmp/realtime-capability.patch.xz' | sha256sum -c -
+          xz -dc /tmp/realtime-capability.patch.xz > /tmp/realtime-capability.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/realtime-capability.patch)
+          (cd release-src && patch -p1 < /tmp/realtime-capability.patch)
+          python - <<'PY'
+          from pathlib import Path
+          service = Path('release-src/android/app/src/main/java/tr/borsatakip/v5/worker/RealtimeAlertService.kt').read_text()
+          socket = Path('release-src/android/app/src/main/java/tr/borsatakip/v5/data/RealtimeScannerSocket.kt').read_text()
+          assert service.count('if (!realtimeCapabilityEnabled())') >= 2
+          assert 'private suspend fun realtimeCapabilityEnabled()' in service
+          assert 'capability.features.realtimeScannerWebSocket && capability.features.attestationReady' in service
+          assert 'REALTIME_SCANNER_UNAVAILABLE_HTTP_$httpCode' in socket
+          assert 'httpCode == 404 || httpCode == 410 || httpCode == 503' in socket
+          print('REALTIME_RECONNECT_CAPABILITY_RECHECK=PASS')
+          print('REALTIME_HANDSHAKE_UNAVAILABLE_CLASSIFICATION=PASS')
           PY
 
       - name: Run backend regressions
@@ -154,7 +177,8 @@ jobs:
           rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__
           (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-VIOP-INDEPENDENT-PREFLIGHT-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*')
           cp /tmp/viop-independent.patch out/V6.1.1-VIOP-INDEPENDENT-PREFLIGHT.patch
-          printf 'VIOP_BIST_PREFLIGHT_ISOLATION=PASS\nVIOP_FAILURE_DOES_NOT_POISON_BIST_HEALTH=PASS\nHOME_RUNTIME_PIPELINE=PRESERVED\nCANONICAL_LONG_SHORT_FILTER=PRESERVED\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nRELEASE_SIGNING=%s\nTRADEWIZE_PRODUCTION_CREDENTIAL=BLOCKED_NOT_PROVIDED\nTRADEWIZE_PRODUCTION_E2E=NOT_RUN\nPHYSICAL_DEVICE=NOT_RUN\n' "$RELEASE_SIGNING" >> out/VERIFICATION.txt
+          cp /tmp/realtime-capability.patch out/V6.1.1-REALTIME-CAPABILITY-RECONNECT.patch
+          printf 'VIOP_BIST_PREFLIGHT_ISOLATION=PASS\nVIOP_FAILURE_DOES_NOT_POISON_BIST_HEALTH=PASS\nREALTIME_RECONNECT_CAPABILITY_RECHECK=PASS\nREALTIME_HANDSHAKE_UNAVAILABLE_CLASSIFICATION=PASS\nHOME_RUNTIME_PIPELINE=PRESERVED\nCANONICAL_LONG_SHORT_FILTER=PRESERVED\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nRELEASE_SIGNING=%s\nTRADEWIZE_PRODUCTION_CREDENTIAL=BLOCKED_NOT_PROVIDED\nTRADEWIZE_PRODUCTION_E2E=NOT_RUN\nPHYSICAL_DEVICE=NOT_RUN\n' "$RELEASE_SIGNING" >> out/VERIFICATION.txt
           sha256sum out/*.apk out/*.zip out/*.patch > out/SHA256SUMS.txt
 
       - name: Upload VIOP independent preflight package
