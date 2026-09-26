@@ -1,0 +1,64 @@
+name: V6.1.1 VIOP R3 Source Fix
+
+on:
+  push:
+    branches: [ v611-viop-r2-source-fix ]
+    paths:
+      - 'backend_v611/viop_r3_policy.mjs'
+      - 'backend_v611/viop_sidecar_r3.mjs'
+      - 'backend_v611/tests/test_viop_r3_policy.mjs'
+      - '.github/workflows/test-v611-viop-r3-source-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and metadata-activeFuture tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check backend_v611/viop_r3_policy.mjs
+          node --check backend_v611/viop_sidecar_r3.mjs
+          node backend_v611/tests/test_viop_r3_policy.mjs
+      - name: Verify preflight gate order
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('backend_v611/viop_sidecar_r3.mjs').read_text()
+          start=s.index('async function probeFull()')
+          end=s.index('function capabilitySnapshot', start)
+          body=s[start:end]
+          auth=body.index('const auth=await ensureTradeWizeAuth(true)')
+          data=body.index('const dataCfg=dataConfigState()')
+          assert auth < data, 'OAuth must run before data endpoint config gate'
+          assert "if(auth.state!=='CONNECTED')" in body
+          assert "TRADEWIZE_ENDPOINTS_NOT_CONFIGURED" in body
+          assert "metadataReady=split.metadataReady" in body
+          assert "activeFutureReady=split.activeFutureReady" in body
+          print('VIOP_R3_PREFLIGHT_ORDER=PASS')
+          PY
+      - name: Verify no guessed provider endpoints or app-key fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('backend_v611/viop_sidecar_r3.mjs').read_text()
+          assert "TRADEWIZE_BASE_URL||''" in s
+          assert 'api.tradewize.com.tr' not in s
+          provider_block=s[s.index("const TW_KEY="):s.index("let authCache=")]
+          assert 'BORSA_API_KEY' not in provider_block
+          print('VIOP_R3_NO_GUESSED_ENDPOINTS=PASS')
+          print('VIOP_R3_PROVIDER_CREDENTIAL_ISOLATION=PASS')
+          PY
