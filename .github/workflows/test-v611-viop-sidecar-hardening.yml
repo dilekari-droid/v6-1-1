@@ -1,0 +1,57 @@
+name: V6.1.1 VIOP Sidecar Hardening
+
+on:
+  push:
+    branches: [ v611-viop-sidecar-hardening ]
+    paths:
+      - 'backend_v611/viop_sidecar.mjs'
+      - 'backend_v611/viop_runtime_policy.mjs'
+      - 'backend_v611/tests/test_viop_runtime_policy.mjs'
+      - '.github/workflows/test-v611-viop-sidecar-hardening.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.38'
+      - name: Syntax and policy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check backend_v611/viop_sidecar.mjs
+          node backend_v611/tests/test_viop_runtime_policy.mjs
+      - name: Fail-closed Bun runtime test without provider secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=18080 BORSA_API_KEY=test-key V611_SOURCE_REVISION=${GITHUB_SHA} bun backend_v611/viop_sidecar.mjs >/tmp/sidecar.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/v1/health >/tmp/health.json; then break; fi
+            sleep 0.5
+          done
+          node -e "const x=require('/tmp/health.json'); if(!x.ok||x.sourceRevision!==process.env.GITHUB_SHA) process.exit(1)"
+          STATUS=$(curl -sS -o /tmp/preflight.json -w '%{http_code}' -H 'x-api-key: test-key' http://127.0.0.1:18080/v1/preflight)
+          test "$STATUS" = "503"
+          node - <<'NODE'
+          const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/preflight.json','utf8'));
+          if (x.ok !== false) throw new Error('preflight must fail closed');
+          if (x.tradeWize?.state !== 'NOT_CONFIGURED') throw new Error('state must be NOT_CONFIGURED');
+          if (x.markets?.VIOP?.ready !== false) throw new Error('VIOP must not be ready');
+          if (x.markets?.VIOP?.reasonCode !== 'TRADEWIZE_API_KEY_MISSING') throw new Error('unexpected reasonCode');
+          console.log('VIOP_FAIL_CLOSED_RUNTIME=PASS');
+          NODE
+          grep -q 'V611_TRADEWIZE_KEY_PRESENT=NO' /tmp/sidecar.log
+          grep -q 'V611_ENDPOINTS_CONFIGURED=NO' /tmp/sidecar.log
