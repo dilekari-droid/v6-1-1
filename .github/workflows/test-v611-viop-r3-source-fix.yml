@@ -6,7 +6,9 @@ on:
     paths:
       - 'backend_v611/viop_r3_policy.mjs'
       - 'backend_v611/viop_sidecar_r3.mjs'
+      - 'backend_v611/production_gateway_r3.mjs'
       - 'backend_v611/tests/test_viop_r3_policy.mjs'
+      - 'backend_v611/tests/test_production_gateway_r3.mjs'
       - '.github/workflows/test-v611-viop-r3-source-fix.yml'
   workflow_dispatch:
 
@@ -28,7 +30,13 @@ jobs:
           set -euo pipefail
           node --check backend_v611/viop_r3_policy.mjs
           node --check backend_v611/viop_sidecar_r3.mjs
+          node --check backend_v611/production_gateway_r3.mjs
           node backend_v611/tests/test_viop_r3_policy.mjs
+      - name: Production gateway runtime test
+        shell: bash
+        run: |
+          set -euo pipefail
+          node backend_v611/tests/test_production_gateway_r3.mjs
       - name: Verify preflight gate order
         shell: bash
         run: |
