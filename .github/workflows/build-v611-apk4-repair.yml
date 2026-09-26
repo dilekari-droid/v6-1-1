@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           base64 -d .ci/v611-apk4-repair.patch.xz.b64 > /tmp/apk4.patch.xz
-          echo '0e17a0ec3b43630cbe1a90103382209d3a2a2f9c62c3c9154076b093a7c99894  /tmp/apk4.patch.xz' | sha256sum -c -
+          echo '174b152193b4503d938760bcf37a5884435334e634f2b5295a9849cf3732968d  /tmp/apk4.patch.xz' | sha256sum -c -
           xz -dc /tmp/apk4.patch.xz > /tmp/apk4.patch
           (cd release-src && patch --dry-run -p1 < /tmp/apk4.patch)
           (cd release-src && patch -p1 < /tmp/apk4.patch)
