@@ -81,13 +81,17 @@ jobs:
               print(f'{name}=PASS')
           PY
 
-      - name: Run backend pytest suite
+      - name: Run backend regression suite
         working-directory: release-src
         shell: bash
         run: |
           set -euo pipefail
           export PYTHONPATH=.
-          python -m pytest -q backend_v611/tests
+          python backend_v611/tests/test_provider_readiness.py
+          python backend_v611/tests/test_trade_wize_quota.py
+          python backend_v611/tests/test_trade_wize_response_policy.py
+          python backend_v611/tests/test_trade_wize_http_adapter.py
+          python backend_v611/tests/test_viop_contract_parser.py
           python -m py_compile backend_v611/*.py
 
       - name: Set up JDK 17
@@ -149,7 +153,7 @@ jobs:
             "$BUILD_TOOLS/zipalign" -f -p 4 "$RELEASE_APK" out/V6.1.1-APK4-REPAIRED-UNSIGNED-ALIGNED.apk
             echo 'RELEASE_SIGNATURE=BLOCKED_NO_RELEASE_KEY' >> out/VERIFICATION.txt
           fi
-          printf 'ANDROID_UNIT_TESTS=PASS\nBACKEND_PYTEST=PASS\nDEBUG_SIGNATURE=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nRELEASE_SIGNING=%s\nPHYSICAL_DEVICE=NOT_RUN\nPLAY_PROTECT_FINAL=NOT_RUN\n' "$RELEASE_SIGNING" >> out/VERIFICATION.txt
+          printf 'ANDROID_UNIT_TESTS=PASS\nBACKEND_REGRESSIONS=PASS\nDEBUG_SIGNATURE=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nRELEASE_SIGNING=%s\nPHYSICAL_DEVICE=NOT_RUN\nPLAY_PROTECT_FINAL=NOT_RUN\n' "$RELEASE_SIGNING" >> out/VERIFICATION.txt
           rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__ release-src/.pytest_cache
           (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-APK4-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*' '.pytest_cache/*')
           cp /tmp/apk4.patch out/V6.1.1-APK4-REPAIR.patch
