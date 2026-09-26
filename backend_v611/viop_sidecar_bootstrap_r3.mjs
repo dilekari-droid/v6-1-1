@@ -1,50 +1,60 @@
-const required = {
-  TRADEWIZE_API_KEY: String(process.env.TRADEWIZE_API_KEY || '').trim(),
-  TRADEWIZE_BASE_URL: String(process.env.TRADEWIZE_BASE_URL || '').trim(),
-  TRADEWIZE_TOKEN_URL: String(process.env.TRADEWIZE_TOKEN_URL || '').trim(),
-  TRADEWIZE_UNIVERSE_URL: String(process.env.TRADEWIZE_UNIVERSE_URL || '').trim(),
-  TRADEWIZE_QUOTE_URL_TEMPLATE: String(process.env.TRADEWIZE_QUOTE_URL_TEMPLATE || '').trim(),
-  TRADEWIZE_HISTORY_URL_TEMPLATE: String(process.env.TRADEWIZE_HISTORY_URL_TEMPLATE || '').trim(),
-};
+const TOKEN_URL = String(process.env.TRADEWIZE_TOKEN_URL || '').trim();
+const BASE_URL = String(process.env.TRADEWIZE_BASE_URL || '').trim().replace(/\/$/, '');
 
-function httpsUrl(value, { symbolTemplate = false } = {}) {
+function httpsUrl(value) {
   if (!value) return false;
   try {
-    const probe = symbolTemplate ? value.replace('{symbol}', 'TEST') : value;
-    const url = new URL(probe);
-    return url.protocol === 'https:' && (!symbolTemplate || value.includes('{symbol}'));
+    const url = new URL(value);
+    return url.protocol === 'https:';
   } catch {
     return false;
   }
 }
 
-function fail(code, detail) {
-  console.error(`V611_BOOTSTRAP_FAIL code=${code} detail=${detail}`);
-  process.exit(78);
-}
+const tokenConfigured = httpsUrl(TOKEN_URL);
+const originalFetch = globalThis.fetch.bind(globalThis);
 
-const missing = [];
-if (!required.TRADEWIZE_API_KEY) missing.push('TRADEWIZE_API_KEY');
-for (const key of ['TRADEWIZE_BASE_URL', 'TRADEWIZE_TOKEN_URL', 'TRADEWIZE_UNIVERSE_URL']) {
-  if (!httpsUrl(required[key])) missing.push(key);
-}
-for (const key of ['TRADEWIZE_QUOTE_URL_TEMPLATE', 'TRADEWIZE_HISTORY_URL_TEMPLATE']) {
-  if (!httpsUrl(required[key], { symbolTemplate: true })) missing.push(key);
-}
+/*
+ * viop_sidecar_r2 historically builds `${TRADEWIZE_BASE_URL}/oauth/token`.
+ * Production must never contact that inferred endpoint unless an explicit
+ * TRADEWIZE_TOKEN_URL has been configured. Intercept only that OAuth request,
+ * route it to the explicit HTTPS URL when present, and otherwise return a
+ * synthetic fail-closed response without making any provider network call.
+ */
+globalThis.fetch = async function guardedFetch(input, init = undefined) {
+  const rawUrl = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : String(input?.url || '');
+  const method = String(init?.method || input?.method || 'GET').toUpperCase();
+  const inferredTokenUrl = BASE_URL ? `${BASE_URL}/oauth/token` : '';
 
-if (missing.length) {
-  fail('TRADEWIZE_CONFIG_INCOMPLETE', `missing_or_invalid=${missing.join(',')}`);
-}
+  if (method === 'POST' && inferredTokenUrl && rawUrl === inferredTokenUrl) {
+    if (!tokenConfigured) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          code: 'TRADEWIZE_TOKEN_URL_NOT_CONFIGURED',
+          message: 'Explicit TradeWize token endpoint is not configured.',
+        }),
+        {
+          status: 503,
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'no-store',
+          },
+        },
+      );
+    }
+    return originalFetch(TOKEN_URL, init);
+  }
 
-const base = required.TRADEWIZE_BASE_URL.replace(/\/$/, '');
-const token = required.TRADEWIZE_TOKEN_URL.replace(/\/$/, '');
-const expectedToken = `${base}/oauth/token`;
-if (token !== expectedToken) {
-  fail('TRADEWIZE_TOKEN_URL_BASE_MISMATCH', 'explicit token URL does not match configured base + /oauth/token');
-}
+  return originalFetch(input, init);
+};
 
-console.log('V611_BOOTSTRAP_CONFIG_VALID=YES');
-console.log('V611_BOOTSTRAP_ENDPOINTS_EXPLICIT=YES');
+console.log(`V611_EXPLICIT_TOKEN_URL_CONFIGURED=${tokenConfigured ? 'YES' : 'NO'}`);
+console.log('V611_OAUTH_ENDPOINT_GUARD=ENABLED');
 console.log('V611_BOOTSTRAP_SECRETS_LOGGED=NO');
 
 await import('./viop_sidecar_r2.mjs');
