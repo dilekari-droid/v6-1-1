@@ -6,7 +6,9 @@ on:
     paths:
       - 'backend_v611/viop_sidecar.mjs'
       - 'backend_v611/viop_runtime_policy.mjs'
+      - 'backend_v611/production_gateway.mjs'
       - 'backend_v611/tests/test_viop_runtime_policy.mjs'
+      - 'backend_v611/tests/test_production_gateway.mjs'
       - 'diagnostics/viop_probe.py'
       - '.github/workflows/test-v611-viop-sidecar-hardening.yml'
   workflow_dispatch:
@@ -31,8 +33,14 @@ jobs:
         run: |
           set -euo pipefail
           node --check backend_v611/viop_sidecar.mjs
+          node --check backend_v611/production_gateway.mjs
           node backend_v611/tests/test_viop_runtime_policy.mjs
           python -m py_compile diagnostics/viop_probe.py
+      - name: Production gateway routing tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node backend_v611/tests/test_production_gateway.mjs
       - name: Provider credential isolation test
         shell: bash
         run: |
