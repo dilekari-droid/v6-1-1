@@ -1,0 +1,134 @@
+name: V6.1.1 APK6 VIOP Selection Visibility Fix
+
+on:
+  push:
+    branches: [ v611-apk6-viop-selection-visibility ]
+    paths:
+      - '.ci/v611-apk6-viop-selection-visibility.patch.xz.b64'
+      - '.github/workflows/build-v611-apk6-viop-selection-visibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+
+    steps:
+      - name: Checkout APK6 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified APK5 source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10901250981/zip' \
+            -o /tmp/apk5-package.zip
+          mkdir -p /tmp/apk5-package release-src
+          unzip -q /tmp/apk5-package.zip -d /tmp/apk5-package
+          echo '04a2ed2b53bb7a2d5b9bdae9c7938e11e08cc6a90b187ccb1b9e2094cc2ec939  /tmp/apk5-package/V6.1.1-APK5-SOURCE.zip' | sha256sum -c -
+          unzip -q /tmp/apk5-package/V6.1.1-APK5-SOURCE.zip -d release-src
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build
+
+      - name: Apply verified APK6 selection-visibility patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-apk6-viop-selection-visibility.patch.xz.b64 > /tmp/apk6.patch.xz
+          echo '92590946e24b731799d11d6f5d417762dcdcbdb4d74959c234be4c672fcf468b  /tmp/apk6.patch.xz' | sha256sum -c -
+          xz -dc /tmp/apk6.patch.xz > /tmp/apk6.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/apk6.patch)
+          (cd release-src && patch -p1 < /tmp/apk6.patch)
+
+      - name: Verify APK6 repair guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ViopActivity.kt')
+          text = p.read_text()
+          start = text.index('private fun clearPreview()')
+          end = text.index('private fun showUnavailableSummary', start)
+          block = text[start:end]
+          assert 'AppSession.selectedViopContract?.let { selected ->' in block
+          assert 'previewContract = selected' in block
+          assert 'Kontrat seçildi • canlı quote bekleniyor' in block
+          assert 'findViewById<TextView>(R.id.marketContracts).text = "Seçili\\n${selected.symbol}"' in block
+          print('VIOP_SELECTED_CONTRACT_SURVIVES_PROVIDER_ERROR=PASS')
+          print('VIOP_MARKET_DATA_REMAINS_FAIL_CLOSED=PASS')
+          PY
+
+      - name: Run backend regression suite
+        working-directory: release-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=.
+          python backend_v611/tests/test_provider_readiness.py
+          python backend_v611/tests/test_trade_wize_quota.py
+          python backend_v611/tests/test_trade_wize_response_policy.py
+          python backend_v611/tests/test_trade_wize_http_adapter.py
+          python backend_v611/tests/test_viop_contract_parser.py
+          python -m py_compile backend_v611/*.py
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run Android release unit tests
+        working-directory: release-src/android
+        shell: bash
+        env:
+          BORSA_EXTERNAL_SIGNING: '1'
+        run: gradle --no-daemon --stacktrace testReleaseUnitTest
+
+      - name: Build debug APK
+        working-directory: release-src/android
+        shell: bash
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Package and verify APK6
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          DEBUG_APK="$(find release-src/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -1)"
+          test -n "$DEBUG_APK"
+          cp "$DEBUG_APK" out/V6.1.1-APK6-VIOP-SELECTION-VISIBILITY-DEBUG.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-APK6-VIOP-SELECTION-VISIBILITY-DEBUG.apk > out/debug-signature.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-APK6-VIOP-SELECTION-VISIBILITY-DEBUG.apk > out/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/debug-badging.txt
+          printf 'ANDROID_UNIT_TESTS=PASS\nBACKEND_REGRESSIONS=PASS\nDEBUG_SIGNATURE=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nVIOP_SELECTION_VISIBILITY=PASS\nTRADEWIZE_PRODUCTION_AUTH=BLOCKED_HTTP_401_WITH_CURRENT_BORSA_API_KEY\nPHYSICAL_DEVICE=NOT_RUN\n' > out/VERIFICATION.txt
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__ release-src/.pytest_cache
+          (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-APK6-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*' '.pytest_cache/*')
+          cp /tmp/apk6.patch out/V6.1.1-APK6-VIOP-SELECTION-VISIBILITY.patch
+          sha256sum out/*.apk out/*.zip out/*.patch > out/SHA256SUMS.txt
+
+      - name: Upload APK6 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-APK6-VIOP-SELECTION-VISIBILITY-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: out/*
