@@ -4,11 +4,10 @@ on:
   push:
     branches: [ v611-viop-r2-source-fix ]
     paths:
+      - '.ci/patch_viop_r3_source.py'
       - 'backend_v611/viop_r3_policy.mjs'
       - 'backend_v611/viop_sidecar_r3.mjs'
-      - 'backend_v611/viop_sidecar_r3_fixed.b64'
       - 'backend_v611/production_gateway_r3.mjs'
-      - 'backend_v611/tests/test_viop_r3_policy.mjs'
       - 'backend_v611/tests/test_viop_r3_policy_fixed.mjs'
       - 'backend_v611/tests/mock_trade_wize_provider_r3_fixed.mjs'
       - 'backend_v611/tests/test_production_gateway_r3.mjs'
@@ -33,28 +32,27 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Decode candidate and run syntax-policy tests
+      - name: Apply targeted source patch
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d backend_v611/viop_sidecar_r3_fixed.b64 > backend_v611/viop_sidecar_r3.candidate.mjs
+          python .ci/patch_viop_r3_source.py
           node --check backend_v611/viop_r3_policy.mjs
-          node --check backend_v611/viop_sidecar_r3.candidate.mjs
+          node --check backend_v611/viop_sidecar_r3.mjs
           node --check backend_v611/production_gateway_r3.mjs
           node backend_v611/tests/test_viop_r3_policy_fixed.mjs
           python - <<'PY'
           from pathlib import Path
-          s=Path('backend_v611/viop_sidecar_r3.candidate.mjs').read_text()
+          s=Path('backend_v611/viop_sidecar_r3.mjs').read_text()
           assert 'TRADEWIZE_OAUTH_URL' in s
-          assert 'fetch(OAUTH_URL' in s
+          assert 'fetch(OAUTH_URL,' in s
           assert '${TW_BASE}/oauth/token' not in s
-          assert "TRADEWIZE_BASE_URL" not in s
+          assert 'TRADEWIZE_BASE_URL' not in s
           assert "const expiryAt = toMs(raw.expiryAt);" in Path('backend_v611/viop_r3_policy.mjs').read_text()
           print('VIOP_R3_EXPLICIT_OAUTH_URL=PASS')
           print('VIOP_R3_NO_DERIVED_OAUTH_ENDPOINT=PASS')
           print('VIOP_R3_EXPIRY_SYNTHESIS_REMOVED=PASS')
           PY
-          cp backend_v611/viop_sidecar_r3.candidate.mjs backend_v611/viop_sidecar_r3.mjs
 
       - name: Production gateway runtime test
         shell: bash
@@ -68,48 +66,35 @@ jobs:
           set -euo pipefail
           cleanup(){ jobs -pr | xargs -r kill || true; }
           trap cleanup EXIT
-          bun backend_v611/tests/mock_trade_wize_provider_r3_fixed.mjs > /tmp/mock.log 2>&1 &
-          MOCK_PID=$!
+          bun backend_v611/tests/mock_trade_wize_provider_r3_fixed.mjs >/tmp/mock.log 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:18090/stats >/dev/null 2>&1 && break; sleep 0.25; done
           curl -fsS http://127.0.0.1:18090/stats >/dev/null
 
-          run_sidecar(){
-            local port="$1"; shift
-            env PORT="$port" BORSA_API_KEY='test-app-key' TRADEWIZE_API_KEY='test-provider-key' \
-              TRADEWIZE_OAUTH_URL='http://127.0.0.1:18090/oauth/token' V611_TEST_ALLOW_HTTP=1 \
-              V611_SOURCE_REVISION='ci-r3-fixed' "$@" \
-              bun backend_v611/viop_sidecar_r3.mjs > "/tmp/sidecar-${port}.log" 2>&1 &
-            echo $!
-          }
-          wait_health(){
-            local port="$1"
-            for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:${port}/v1/health" >/dev/null 2>&1 && return 0; sleep 0.25; done
-            cat "/tmp/sidecar-${port}.log"; return 1
-          }
-
-          P1=$(run_sidecar 18091)
-          wait_health 18091
+          env PORT=18091 BORSA_API_KEY=test-app-key TRADEWIZE_API_KEY=test-provider-key \
+            TRADEWIZE_OAUTH_URL=http://127.0.0.1:18090/oauth/token V611_TEST_ALLOW_HTTP=1 V611_SOURCE_REVISION=ci-r3-fixed \
+            bun backend_v611/viop_sidecar_r3.mjs >/tmp/sidecar-18091.log 2>&1 & P1=$!
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:18091/v1/health >/dev/null 2>&1 && break; sleep 0.25; done
           code=$(curl -sS -o /tmp/p1.json -w '%{http_code}' -H 'x-api-key: test-app-key' http://127.0.0.1:18091/v1/preflight)
-          test "$code" = '503'
+          test "$code" = 503
           python - <<'PY'
           import json
-          b=json.load(open('/tmp/p1.json'))
-          v=b['markets']['VIOP']
+          b=json.load(open('/tmp/p1.json')); v=b['markets']['VIOP']
           assert b['tradeWize']['state']=='CONNECTED'
-          assert v['ready'] is False
-          assert v['reasonCode']=='TRADEWIZE_UNIVERSE_URL_MISSING'
+          assert v['ready'] is False and v['reasonCode']=='TRADEWIZE_UNIVERSE_URL_MISSING'
           print('VIOP_R3_GATE_AUTH_THEN_UNIVERSE=PASS')
           PY
-          kill "$P1"; wait "$P1" 2>/dev/null || true
+          kill $P1; wait $P1 2>/dev/null || true
 
-          P2=$(run_sidecar 18092 TRADEWIZE_UNIVERSE_URL='http://127.0.0.1:18090/universe')
-          wait_health 18092
+          env PORT=18092 BORSA_API_KEY=test-app-key TRADEWIZE_API_KEY=test-provider-key \
+            TRADEWIZE_OAUTH_URL=http://127.0.0.1:18090/oauth/token TRADEWIZE_UNIVERSE_URL=http://127.0.0.1:18090/universe \
+            V611_TEST_ALLOW_HTTP=1 V611_SOURCE_REVISION=ci-r3-fixed \
+            bun backend_v611/viop_sidecar_r3.mjs >/tmp/sidecar-18092.log 2>&1 & P2=$!
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:18092/v1/health >/dev/null 2>&1 && break; sleep 0.25; done
           code=$(curl -sS -o /tmp/p2.json -w '%{http_code}' -H 'x-api-key: test-app-key' http://127.0.0.1:18092/v1/preflight)
-          test "$code" = '503'
+          test "$code" = 503
           python - <<'PY'
           import json
-          b=json.load(open('/tmp/p2.json'))
-          v=b['markets']['VIOP']
+          b=json.load(open('/tmp/p2.json')); v=b['markets']['VIOP']
           assert v['contractsReady'] is True
           assert v['metadataReady'] is True
           assert v['activeFutureReady'] is True
@@ -117,19 +102,20 @@ jobs:
           assert v['reasonCode']=='TRADEWIZE_QUOTE_URL_MISSING'
           print('VIOP_R3_GATE_UNIVERSE_METADATA_ACTIVE_THEN_QUOTE=PASS')
           PY
-          kill "$P2"; wait "$P2" 2>/dev/null || true
+          kill $P2; wait $P2 2>/dev/null || true
 
-          P3=$(run_sidecar 18093 \
-            TRADEWIZE_UNIVERSE_URL='http://127.0.0.1:18090/universe' \
+          env PORT=18093 BORSA_API_KEY=test-app-key TRADEWIZE_API_KEY=test-provider-key \
+            TRADEWIZE_OAUTH_URL=http://127.0.0.1:18090/oauth/token TRADEWIZE_UNIVERSE_URL=http://127.0.0.1:18090/universe \
             TRADEWIZE_QUOTE_URL_TEMPLATE='http://127.0.0.1:18090/quote/{symbol}' \
-            TRADEWIZE_HISTORY_URL_TEMPLATE='http://127.0.0.1:18090/history/{symbol}')
-          wait_health 18093
+            TRADEWIZE_HISTORY_URL_TEMPLATE='http://127.0.0.1:18090/history/{symbol}' \
+            V611_TEST_ALLOW_HTTP=1 V611_SOURCE_REVISION=ci-r3-fixed \
+            bun backend_v611/viop_sidecar_r3.mjs >/tmp/sidecar-18093.log 2>&1 & P3=$!
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:18093/v1/health >/dev/null 2>&1 && break; sleep 0.25; done
           code=$(curl -sS -o /tmp/p3.json -w '%{http_code}' -H 'x-api-key: test-app-key' http://127.0.0.1:18093/v1/preflight)
-          test "$code" = '200'
+          test "$code" = 200
           python - <<'PY'
           import json
-          b=json.load(open('/tmp/p3.json'))
-          v=b['markets']['VIOP']
+          b=json.load(open('/tmp/p3.json')); v=b['markets']['VIOP']
           assert b['ok'] is True and v['ready'] is True
           for k in ['contractsReady','metadataReady','activeFutureReady','quoteReady','historyReady','freshnessReady','liquidityReady','scannerReady']:
               assert v[k] is True, k
@@ -146,22 +132,19 @@ jobs:
           assert len(h['candles'])>=220
           print('VIOP_R3_ROUTE_CONTRACTS_QUOTE_HISTORY=PASS')
           PY
-          kill "$P3"; wait "$P3" 2>/dev/null || true
+          kill $P3; wait $P3 2>/dev/null || true
 
-      - name: Promote tested candidate to canonical source
+      - name: Promote tested patch to canonical source
         if: success()
         shell: bash
         run: |
           set -euo pipefail
-          cp backend_v611/viop_sidecar_r3.candidate.mjs backend_v611/viop_sidecar_r3.mjs
-          rm -f backend_v611/viop_sidecar_r3.candidate.mjs
-          git rm backend_v611/viop_sidecar_r3_fixed.b64
-          if git diff --quiet && git diff --cached --quiet; then
+          if git diff --quiet -- backend_v611/viop_sidecar_r3.mjs; then
             echo 'CANONICAL_SOURCE_ALREADY_CURRENT=PASS'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add backend_v611/viop_sidecar_r3.mjs backend_v611/viop_sidecar_r3_fixed.b64
+          git add backend_v611/viop_sidecar_r3.mjs
           git commit -m 'fix: promote tested VIOP R3 sidecar source'
           git push origin HEAD:v611-viop-r2-source-fix
