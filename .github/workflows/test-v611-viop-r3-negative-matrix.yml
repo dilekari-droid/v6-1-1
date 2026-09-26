@@ -1,0 +1,85 @@
+name: V6.1.1 VIOP R3 Negative Matrix
+
+on:
+  push:
+    branches: [ v611-viop-r2-source-fix ]
+    paths:
+      - 'backend_v611/viop_r3_policy.mjs'
+      - 'backend_v611/viop_sidecar_r3.mjs'
+      - 'backend_v611/tests/mock_trade_wize_provider_r3_negative.mjs'
+      - '.github/workflows/test-v611-viop-r3-negative-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negative-runtime-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Syntax checks
+        run: |
+          set -euo pipefail
+          node --check backend_v611/viop_r3_policy.mjs
+          node --check backend_v611/viop_sidecar_r3.mjs
+          node --check backend_v611/tests/mock_trade_wize_provider_r3_negative.mjs
+      - name: Fail-closed runtime matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIDS=()
+          cleanup(){ for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
+          trap cleanup EXIT
+
+          PORT=18190 bun backend_v611/tests/mock_trade_wize_provider_r3_negative.mjs >/tmp/mock-negative.log 2>&1 &
+          MOCK_PID=$!; PIDS+=("$MOCK_PID")
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:18190/stats >/dev/null 2>&1 && break; sleep 0.25; done
+          curl -fsS http://127.0.0.1:18190/stats >/dev/null
+
+          run_case(){
+            local mode="$1" expected="$2" port="$3"
+            env PORT="$port" BORSA_API_KEY=test-app-key TRADEWIZE_API_KEY=test-provider-key \
+              TRADEWIZE_OAUTH_URL="http://127.0.0.1:18190/oauth/token?mode=$mode" \
+              TRADEWIZE_UNIVERSE_URL="http://127.0.0.1:18190/universe?mode=$mode" \
+              TRADEWIZE_QUOTE_URL_TEMPLATE="http://127.0.0.1:18190/quote/{symbol}?mode=$mode" \
+              TRADEWIZE_HISTORY_URL_TEMPLATE="http://127.0.0.1:18190/history/{symbol}?mode=$mode" \
+              TRADEWIZE_MIN_INTERVAL_MS=1000 V611_TEST_ALLOW_HTTP=1 V611_SOURCE_REVISION=ci-negative-matrix \
+              bun backend_v611/viop_sidecar_r3.mjs >"/tmp/sidecar-$mode.log" 2>&1 &
+            local pid=$!; PIDS+=("$pid")
+            for i in $(seq 1 60); do curl -fsS "http://127.0.0.1:$port/v1/health" >/dev/null 2>&1 && break; sleep 0.2; done
+            local code
+            code=$(curl -sS -o "/tmp/$mode.json" -w '%{http_code}' -H 'x-api-key: test-app-key' "http://127.0.0.1:$port/v1/preflight")
+            test "$code" = 503
+            python - "$mode" "$expected" "/tmp/$mode.json" <<'PY'
+          import json,sys
+          mode,expected,path=sys.argv[1:]
+          b=json.load(open(path)); v=b['markets']['VIOP']
+          assert v['ready'] is False, (mode,'unexpected READY')
+          assert v['scannerReady'] is False, (mode,'scannerReady true')
+          assert v['reasonCode']==expected, (mode,v['reasonCode'],expected)
+          print(f'VIOP_R3_NEGATIVE_{mode.upper()}=PASS reason={expected}')
+          PY
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
+
+          run_case auth401 TRADEWIZE_AUTH_401 18201
+          run_case auth403 TRADEWIZE_PERMISSION_403 18202
+          run_case auth429 TRADEWIZE_RATE_LIMITED 18203
+          run_case selection_incomplete SELECTION_INCOMPLETE 18204
+          run_case metadata_missing VIOP_CONTRACT_METADATA_UNAVAILABLE 18205
+          run_case expired NO_ACTIVE_FUTURE 18206
+          run_case stale_quote STALE_DATA 18207
+          run_case short_history INSUFFICIENT_HISTORY 18208
+          run_case duplicate_history VIOP_HISTORY_SCHEMA_INVALID 18209
+          run_case no_liquidity VIOP_LIQUIDITY_UNVERIFIED 18210
+
+          echo 'VIOP_R3_NEGATIVE_MATRIX=PASS'
