@@ -1,0 +1,131 @@
+name: V6.1.1 APK5 VIOP Contract Selection Fix
+
+on:
+  push:
+    branches: [ v611-apk5-viop-contract-selection ]
+    paths:
+      - '.ci/v611-apk5-viop-contract-fix.patch.xz.b64'
+      - '.github/workflows/build-v611-apk5-viop-contract-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+
+    steps:
+      - name: Checkout APK5 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified APK4 repaired source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10899810410/zip' \
+            -o /tmp/apk4-package.zip
+          mkdir -p /tmp/apk4-package release-src
+          unzip -q /tmp/apk4-package.zip -d /tmp/apk4-package
+          echo '856c4eba823524a24488474394eead4a91477215110ee6dd8b4e7dc1eafe981d  /tmp/apk4-package/V6.1.1-APK4-SOURCE.zip' | sha256sum -c -
+          unzip -q /tmp/apk4-package/V6.1.1-APK4-SOURCE.zip -d release-src
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build
+
+      - name: Apply verified VIOP contract selection patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-apk5-viop-contract-fix.patch.xz.b64 > /tmp/apk5.patch.xz
+          echo '30ab837f5508296a91d16758d133fe5b474bd5ea4a62683cfae1d4bcb114bb07  /tmp/apk5.patch.xz' | sha256sum -c -
+          xz -dc /tmp/apk5.patch.xz > /tmp/apk5.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/apk5.patch)
+          (cd release-src && patch -p1 < /tmp/apk5.patch)
+
+      - name: Verify repair guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          preflight = Path('release-src/android/app/src/main/java/tr/borsatakip/v5/data/BackendPreflightClient.kt').read_text()
+          contracts = Path('release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ViopContractsActivity.kt').read_text()
+          viop = Path('release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ViopActivity.kt').read_text()
+          assert 'BIST canlılık kapıları yalnız BIST taramasını yönetir' in preflight
+          assert 'if (!includeViop)' in preflight
+          assert 'repository.refreshDetailed()' in contracts
+          assert 'localViopConfigState()' not in contracts
+          assert 'listesine eklendi ve seçildi' in contracts
+          assert 'restoreSelectedContractPreview()' in viop
+          assert 'selectedSymbol = AppSession.selectedViopContract?.symbol' in viop
+          print('VIOP_CONTRACT_BROWSER_DECOUPLED=PASS')
+          print('VIOP_SELECTED_CONTRACT_RESTORE=PASS')
+          print('BIST_QUOTE_NO_LONGER_BLOCKS_VIOP_PREFLIGHT=PASS')
+          PY
+
+      - name: Run backend regression suite
+        working-directory: release-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=.
+          python -m pytest -q backend_v611/tests
+          python -m py_compile backend_v611/*.py
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run Android release unit tests
+        working-directory: release-src/android
+        shell: bash
+        env:
+          BORSA_EXTERNAL_SIGNING: '1'
+        run: gradle --no-daemon --stacktrace testReleaseUnitTest
+
+      - name: Build debug APK
+        working-directory: release-src/android
+        shell: bash
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Package and verify APK5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          DEBUG_APK="$(find release-src/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -1)"
+          test -n "$DEBUG_APK"
+          cp "$DEBUG_APK" out/V6.1.1-APK5-VIOP-CONTRACT-FIX-DEBUG.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-APK5-VIOP-CONTRACT-FIX-DEBUG.apk > out/debug-signature.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-APK5-VIOP-CONTRACT-FIX-DEBUG.apk > out/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/debug-badging.txt
+          printf 'ANDROID_UNIT_TESTS=PASS\nBACKEND_REGRESSIONS=PASS\nDEBUG_SIGNATURE=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nVIOP_CONTRACT_BROWSER=PASS\nBIST_QUOTE_DECOUPLING=PASS\nPHYSICAL_DEVICE=NOT_RUN\n' > out/VERIFICATION.txt
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__ release-src/.pytest_cache
+          (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-APK5-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*' '.pytest_cache/*')
+          cp /tmp/apk5.patch out/V6.1.1-APK5-VIOP-CONTRACT-FIX.patch
+          sha256sum out/*.apk out/*.zip out/*.patch > out/SHA256SUMS.txt
+
+      - name: Upload APK5 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-APK5-VIOP-CONTRACT-FIX-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: out/*
