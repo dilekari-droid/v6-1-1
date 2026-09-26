@@ -3,17 +3,18 @@ import {canonicalSymbol,canonicalContract,splitReadiness,toMs,positive} from './
 const PORT=Number(process.env.PORT||8080);
 const APP_KEY=(process.env.BORSA_API_KEY||process.env.APP_API_KEY||'').trim();
 const TW_KEY=(process.env.TRADEWIZE_API_KEY||'').trim();
-const TW_BASE=(process.env.TRADEWIZE_BASE_URL||'').trim().replace(/\/$/,'');
+const OAUTH_URL=(process.env.TRADEWIZE_OAUTH_URL||'').trim();
 const UNIVERSE_URL=(process.env.TRADEWIZE_UNIVERSE_URL||'').trim();
 const QUOTE_TEMPLATE=(process.env.TRADEWIZE_QUOTE_URL_TEMPLATE||'').trim();
 const HISTORY_TEMPLATE=(process.env.TRADEWIZE_HISTORY_URL_TEMPLATE||'').trim();
 const SOURCE_REVISION=(process.env.V611_SOURCE_REVISION||'v611-viop-r3').trim();
+const TEST_ALLOW_HTTP=process.env.V611_TEST_ALLOW_HTTP==='1';
 const MIN_PROVIDER_INTERVAL_MS=Math.max(1000,Number(process.env.TRADEWIZE_MIN_INTERVAL_MS||1000));
 const MAX_DATA_AGE_MS=60_000;
 const MAX_FUTURE_CLOCK_SKEW_MS=5_000;
 const MAX_DECLARED_DELAY_SECONDS=5;
 
-let authCache={token:'',expiresAt:0,state:TW_KEY&&TW_BASE?'CONFIGURED_UNVERIFIED':'NOT_CONFIGURED',error:null,reasonCode:TW_KEY&&TW_BASE?null:'TRADEWIZE_AUTH_CONFIG_MISSING'};
+let authCache={token:'',expiresAt:0,state:TW_KEY&&endpointConfigured(OAUTH_URL)?'CONFIGURED_UNVERIFIED':'NOT_CONFIGURED',error:null,reasonCode:!TW_KEY?'TRADEWIZE_API_KEY_MISSING':(endpointConfigured(OAUTH_URL)?null:'TRADEWIZE_OAUTH_URL_MISSING')};
 let lastAuthAt=0;
 let nextDispatchAt=0;
 let cooldownUntil=0;
@@ -23,8 +24,8 @@ let lastProbe=blankProbe();
 
 function json(body,status=200,headers={}){return new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',...headers}});}
 function authOk(req){if(!APP_KEY)return false;const k=(req.headers.get('x-api-key')||'').trim();const a=(req.headers.get('authorization')||'').trim();return k===APP_KEY||a===`Bearer ${APP_KEY}`;}
-function endpointConfigured(v,needsSymbol=false){if(!v)return false;try{const u=new URL(needsSymbol?v.replace('{symbol}','X'):v);return u.protocol==='https:'&&(!needsSymbol||v.includes('{symbol}'));}catch{return false;}}
-function authConfigState(){const missing=[];if(!TW_KEY)missing.push('TRADEWIZE_API_KEY');if(!endpointConfigured(TW_BASE))missing.push('TRADEWIZE_BASE_URL');return{ready:missing.length===0,missing};}
+function endpointConfigured(v,needsSymbol=false){if(!v)return false;try{const u=new URL(needsSymbol?v.replace('{symbol}','X'):v);const httpsOk=u.protocol==='https:';const localTestOk=TEST_ALLOW_HTTP&&u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname);return(httpsOk||localTestOk)&&(!needsSymbol||v.includes('{symbol}'));}catch{return false;}}
+function authConfigState(){const missing=[];if(!TW_KEY)missing.push('TRADEWIZE_API_KEY');if(!endpointConfigured(OAUTH_URL))missing.push('TRADEWIZE_OAUTH_URL');return{ready:missing.length===0,missing};}
 function dataConfigState(){const missing=[];if(!endpointConfigured(UNIVERSE_URL))missing.push('TRADEWIZE_UNIVERSE_URL');if(!endpointConfigured(QUOTE_TEMPLATE,true))missing.push('TRADEWIZE_QUOTE_URL_TEMPLATE');if(!endpointConfigured(HISTORY_TEMPLATE,true))missing.push('TRADEWIZE_HISTORY_URL_TEMPLATE');return{ready:missing.length===0,missing};}
 function errorWith(code,message,status=502){return Object.assign(new Error(message),{code,status});}
 function blankProbe(){return{contractsReady:false,metadataReady:false,activeFutureReady:false,quoteReady:false,historyReady:false,freshnessReady:false,liquidityReady:false,scannerReady:false,symbolCount:0,sampleSymbol:null,reasonCode:null,message:null,lastProbeAt:0};}
@@ -34,14 +35,14 @@ async function singleflight(key,fn){if(inflight.has(key))return inflight.get(key
 
 async function ensureTradeWizeAuth(force=false){
   const cfg=authConfigState();
-  if(!cfg.ready){authCache={token:'',expiresAt:0,state:'NOT_CONFIGURED',error:`missing=${cfg.missing.join(',')}`,reasonCode:'TRADEWIZE_AUTH_CONFIG_MISSING'};return authCache;}
+  if(!cfg.ready){const reasonCode=!TW_KEY?'TRADEWIZE_API_KEY_MISSING':'TRADEWIZE_OAUTH_URL_MISSING';authCache={token:'',expiresAt:0,state:'NOT_CONFIGURED',error:`missing=${cfg.missing.join(',')}`,reasonCode};return authCache;}
   const now=Date.now();
   if(!force&&authCache.token&&authCache.expiresAt>now+30_000)return authCache;
   return singleflight('oauth',async()=>{
     const again=Date.now();if(!force&&authCache.token&&authCache.expiresAt>again+30_000)return authCache;
     lastAuthAt=again;await acquireQuota();
     try{
-      const r=await fetch(`${TW_BASE}/oauth/token`,{method:'POST',headers:{'X-API-Key':TW_KEY,'Accept':'application/json','Content-Type':'application/json'},body:JSON.stringify({grant_type:'api_key'}),signal:AbortSignal.timeout(15_000)});
+      const r=await fetch(OAUTH_URL,{method:'POST',headers:{'X-API-Key':TW_KEY,'Accept':'application/json','Content-Type':'application/json'},body:JSON.stringify({grant_type:'api_key'}),signal:AbortSignal.timeout(15_000)});
       const text=await r.text();let body={};try{body=text?JSON.parse(text):{};}catch{}
       if(r.status===429){const retry=parseRetryAfter(r.headers.get('retry-after'))??MIN_PROVIDER_INTERVAL_MS;cooldownUntil=Math.max(cooldownUntil,Date.now()+Math.max(MIN_PROVIDER_INTERVAL_MS,retry));authCache={token:'',expiresAt:0,state:'AUTH_FAILED',error:'HTTP 429',reasonCode:'TRADEWIZE_RATE_LIMITED'};return authCache;}
       if(!r.ok){const code=r.status===401?'TRADEWIZE_AUTH_401':r.status===403?'TRADEWIZE_PERMISSION_403':'TRADEWIZE_AUTH_HTTP_ERROR';authCache={token:'',expiresAt:0,state:'AUTH_FAILED',error:`HTTP ${r.status}`,reasonCode:code};return authCache;}
@@ -65,17 +66,32 @@ async function probeFull(){
   const state=blankProbe();state.lastProbeAt=Date.now();
   const auth=await ensureTradeWizeAuth(true);
   if(auth.state!=='CONNECTED'){state.reasonCode=auth.reasonCode||'TRADEWIZE_AUTH_FAILED';state.message='TradeWize authentication not ready';lastProbe=state;return state;}
-  const dataCfg=dataConfigState();
-  if(!dataCfg.ready){state.reasonCode='TRADEWIZE_ENDPOINTS_NOT_CONFIGURED';state.message=`missing=${dataCfg.missing.join(',')}`;lastProbe=state;return state;}
   try{
-    const universe=await fetchFullUniverse();const split=splitReadiness(universe.items,Date.now());
-    state.symbolCount=universe.items.length;state.contractsReady=split.contractsReady;state.metadataReady=split.metadataReady;state.activeFutureReady=split.activeFutureReady;state.sampleSymbol=split.active[0]?.symbol||null;
+    if(!endpointConfigured(UNIVERSE_URL))throw errorWith('TRADEWIZE_UNIVERSE_URL_MISSING','Universe endpoint not configured',503);
+    const universe=await fetchFullUniverse();
+    const split=splitReadiness(universe.items,Date.now());
+    state.symbolCount=universe.items.length;
+    state.contractsReady=split.contractsReady;
+    state.metadataReady=split.metadataReady;
+    state.activeFutureReady=split.activeFutureReady;
+    state.sampleSymbol=split.active[0]?.symbol||null;
     if(!state.contractsReady)throw errorWith('VIOP_CONTRACTS_EMPTY','No contracts',502);
     if(!state.metadataReady)throw errorWith(split.firstMetadataFailure?.code||'VIOP_CONTRACT_METADATA_UNAVAILABLE',`missing=${(split.firstMetadataFailure?.missing||[]).join(',')}`,502);
     if(!state.activeFutureReady)throw errorWith('NO_ACTIVE_FUTURE','No active FUTURE contract',502);
-    const quote=await fetchQuote(state.sampleSymbol);state.quoteReady=true;state.freshnessReady=true;
-    const volume=Number(quote.volume),oi=Number(quote.openInterest);state.liquidityReady=(Number.isFinite(volume)&&volume>0)||(Number.isFinite(oi)&&oi>0);if(!state.liquidityReady)throw errorWith('VIOP_LIQUIDITY_UNVERIFIED','volume/openInterest not verified',502);
-    await fetchHistory(state.sampleSymbol,'1y','1d');state.historyReady=true;state.scannerReady=true;state.reasonCode=null;state.message='VİOP provider E2E verified';lastProbe=state;return state;
+    if(!endpointConfigured(QUOTE_TEMPLATE,true))throw errorWith('TRADEWIZE_QUOTE_URL_MISSING','Quote endpoint not configured',503);
+    const quote=await fetchQuote(state.sampleSymbol);
+    state.quoteReady=true;
+    state.freshnessReady=true;
+    if(!endpointConfigured(HISTORY_TEMPLATE,true))throw errorWith('TRADEWIZE_HISTORY_URL_MISSING','History endpoint not configured',503);
+    const history=await fetchHistory(state.sampleSymbol,'1y','1d');
+    state.historyReady=true;
+    const volume=Number(quote.volume),oi=Number(quote.openInterest);
+    const historyVolumeReady=Array.isArray(history.candles)&&history.candles.some(c=>Number(c.volume)>0);
+    state.liquidityReady=(Number.isFinite(volume)&&volume>0)||(Number.isFinite(oi)&&oi>0)||historyVolumeReady;
+    if(!state.liquidityReady)throw errorWith('VIOP_LIQUIDITY_UNVERIFIED','volume/openInterest/history volume not verified',502);
+    state.scannerReady=state.contractsReady&&state.metadataReady&&state.activeFutureReady&&state.quoteReady&&state.historyReady&&state.freshnessReady&&state.liquidityReady;
+    if(!state.scannerReady)throw errorWith('VIOP_SCANNER_PREREQUISITES_NOT_READY','Scanner prerequisites not ready',502);
+    state.reasonCode=null;state.message='VİOP provider E2E verified';lastProbe=state;return state;
   }catch(e){state.reasonCode=e.code||'VIOP_PROVIDER_ERROR';state.message=e.message||'Provider error';lastProbe=state;return state;}
 }
 
