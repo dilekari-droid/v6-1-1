@@ -2,13 +2,12 @@
 import json
 import os
 import threading
-import time
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 BASE = os.getenv("TRADEWIZE_BASE_URL", "https://api.tradewize.com.tr").rstrip("/")
-API_KEY = os.getenv("TRADEWIZE_API_KEY", "").strip() or os.getenv("BORSA_API_KEY", "").strip()
+API_KEY = os.getenv("TRADEWIZE_API_KEY", "").strip()
 PORT = int(os.getenv("PORT", "8080"))
 
 SENSITIVE_MARKERS = ("token", "secret", "password", "authorization", "api_key", "apikey", "key")
@@ -65,7 +64,7 @@ def unwrap(payload):
 
 def probe():
     if not API_KEY:
-        print("VIOP_PROBE_FAIL missing BORSA_API_KEY/TRADEWIZE_API_KEY", flush=True)
+        print("VIOP_PROBE_FAIL missing TRADEWIZE_API_KEY", flush=True)
         return
     try:
         auth = request_json(
@@ -77,8 +76,17 @@ def probe():
         if not token:
             print("VIOP_PROBE_FAIL oauth response missing access_token", flush=True)
             return
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json", "User-Agent": "BorsaTakip-V611-VIOP-Probe/1"}
-        payload = request_json("GET", "/api/v1/market-data/viop/last-price/details", headers=headers, params={"all": "true"})
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "User-Agent": "BorsaTakip-V611-VIOP-Probe/2",
+        }
+        payload = request_json(
+            "GET",
+            "/api/v1/market-data/viop/last-price/details",
+            headers=headers,
+            params={"all": "true"},
+        )
         raw = unwrap(payload)
         print("VIOP_PROBE_TOP_TYPE", safe_type(raw), flush=True)
         if isinstance(payload, dict):
@@ -95,7 +103,11 @@ def probe():
             return
         _, symbol, record = sorted(candidates, key=lambda x: (x[0], x[1]))[0]
         print("VIOP_PROBE_SYMBOL", symbol, flush=True)
-        print("VIOP_PROBE_FIELD_TYPES", json.dumps({k: safe_type(v) for k, v in sorted(record.items())}, ensure_ascii=False, sort_keys=True), flush=True)
+        print(
+            "VIOP_PROBE_FIELD_TYPES",
+            json.dumps({k: safe_type(v) for k, v in sorted(record.items())}, ensure_ascii=False, sort_keys=True),
+            flush=True,
+        )
         print("VIOP_PROBE_SAFE_SAMPLE", json.dumps(safe_sample(record), ensure_ascii=False, sort_keys=True), flush=True)
         print("VIOP_PROBE_PASS", flush=True)
     except Exception as exc:
@@ -105,12 +117,16 @@ def probe():
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path not in ("/health", "/v1/health"):
-            self.send_response(404); self.end_headers(); return
+            self.send_response(404)
+            self.end_headers()
+            return
         body = b'{"ok":true,"service":"v611-viop-probe"}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.end_headers(); self.wfile.write(body)
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, fmt, *args):
         pass
 
