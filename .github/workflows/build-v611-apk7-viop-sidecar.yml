@@ -1,0 +1,108 @@
+name: V6.1.1 APK7 VIOP Sidecar
+
+on:
+  push:
+    branches: [ v611-apk7-viop-sidecar-routing ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      BORSA_BACKEND_URL: https://borsa-takip-backend-live-production.up.railway.app
+      BORSA_VIOP_BACKEND_URL: https://test-preflight-production.up.railway.app
+      BORSA_ATTESTATION_PUBLIC_KEYS: borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g==
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download APK6 package
+        uses: actions/download-artifact@v4
+        with:
+          name: V6.1.1-APK6-VIOP-SELECTION-VISIBILITY-PACKAGE
+          path: /tmp/apk6-package
+          github-token: ${{ github.token }}
+          run-id: 36227699470
+
+      - name: Prepare APK7 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-src
+          echo '64aee82376cdcda9a1b3f266c4a3deb775e2791b90810914c1ad2a2ffb1ab0d2  /tmp/apk6-package/V6.1.1-APK6-SOURCE.zip' | sha256sum -c -
+          unzip -q /tmp/apk6-package/V6.1.1-APK6-SOURCE.zip -d release-src
+          base64 -d .ci/V6.1.1-APK7-VIOP-SIDECAR.patch.xz.b64 > /tmp/apk7.patch.xz
+          xz -dc /tmp/apk7.patch.xz > /tmp/apk7.patch
+          echo 'e7f49be9c574eb6aec624cda2b7b9019221c02ba47fcee20376d684821e59bbf  /tmp/apk7.patch' | sha256sum -c -
+          cd release-src
+          patch --dry-run -p1 < /tmp/apk7.patch
+          patch -p1 < /tmp/apk7.patch
+
+      - name: Verify routing guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'ViopCapabilityClient(appContext)' release-src/android/app/src/main/java/tr/borsatakip/v5/data/BackendProvider.kt
+          grep -q 'NO_PROVIDER: TradeWize production credential' release-src/android/app/src/main/java/tr/borsatakip/v5/data/BackendProvider.kt
+          grep -q 'NO_CONTRACT_UNIVERSE' release-src/android/app/src/main/java/tr/borsatakip/v5/data/BackendProvider.kt
+          grep -q 'DEFAULT_VIOP_BACKEND_URL' release-src/android/app/src/main/java/tr/borsatakip/v5/data/ViopBackendRouting.kt
+
+      - name: Backend regressions
+        working-directory: release-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=.
+          python backend_v611/tests/test_provider_readiness.py
+          python backend_v611/tests/test_trade_wize_quota.py
+          python backend_v611/tests/test_trade_wize_response_policy.py
+          python backend_v611/tests/test_trade_wize_http_adapter.py
+          python backend_v611/tests/test_viop_contract_parser.py
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Android unit tests
+        working-directory: release-src/android
+        env:
+          BORSA_EXTERNAL_SIGNING: '1'
+        run: gradle --no-daemon testReleaseUnitTest
+
+      - name: Build debug APK
+        working-directory: release-src/android
+        run: gradle --no-daemon assembleDebug
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          DEBUG_APK="$(find release-src/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -1)"
+          cp "$DEBUG_APK" out/V6.1.1-APK7-VIOP-SIDECAR-DEBUG.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose out/V6.1.1-APK7-VIOP-SIDECAR-DEBUG.apk
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-APK7-VIOP-SIDECAR-DEBUG.apk > out/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/debug-badging.txt
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build
+          cd release-src
+          zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-APK7-SOURCE.zip" android backend_v611
+          cd "$GITHUB_WORKSPACE"
+          cp /tmp/apk7.patch out/V6.1.1-APK7-VIOP-SIDECAR.patch
+          sha256sum out/*.apk out/*.zip out/*.patch > out/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-APK7-VIOP-SIDECAR-PACKAGE
+          retention-days: 30
+          path: out/*
