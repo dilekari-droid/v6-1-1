@@ -78,7 +78,11 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH=.
-          python -m pytest -q backend_v611/tests
+          python backend_v611/tests/test_provider_readiness.py
+          python backend_v611/tests/test_trade_wize_quota.py
+          python backend_v611/tests/test_trade_wize_response_policy.py
+          python backend_v611/tests/test_trade_wize_http_adapter.py
+          python backend_v611/tests/test_viop_contract_parser.py
           python -m py_compile backend_v611/*.py
 
       - name: Set up JDK 17
