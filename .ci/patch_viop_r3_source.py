@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 p=Path('backend_v611/viop_sidecar_r3.mjs')
 s=p.read_text()
@@ -80,11 +79,12 @@ assert 'TW_BASE' not in s
 assert 'TRADEWIZE_BASE_URL' not in s
 assert 'TRADEWIZE_OAUTH_URL' in s
 assert 'fetch(OAUTH_URL,' in s
-assert s.index('ensureTradeWizeAuth(true)') < s.index('TRADEWIZE_UNIVERSE_URL_MISSING')
-assert s.index('TRADEWIZE_UNIVERSE_URL_MISSING') < s.index('VIOP_CONTRACT_METADATA_UNAVAILABLE')
-assert s.index('VIOP_CONTRACT_METADATA_UNAVAILABLE') < s.index('TRADEWIZE_QUOTE_URL_MISSING')
-assert s.index('TRADEWIZE_QUOTE_URL_MISSING') < s.index('TRADEWIZE_HISTORY_URL_MISSING')
-assert s.index('TRADEWIZE_HISTORY_URL_MISSING') < s.index('VIOP_LIQUIDITY_UNVERIFIED')
+probe=s[s.index('async function probeFull(){'):s.index('\nfunction capabilitySnapshot',s.index('async function probeFull(){'))]
+assert probe.index('ensureTradeWizeAuth(true)') < probe.index('TRADEWIZE_UNIVERSE_URL_MISSING')
+assert probe.index('TRADEWIZE_UNIVERSE_URL_MISSING') < probe.index('VIOP_CONTRACT_METADATA_UNAVAILABLE')
+assert probe.index('VIOP_CONTRACT_METADATA_UNAVAILABLE') < probe.index('TRADEWIZE_QUOTE_URL_MISSING')
+assert probe.index('TRADEWIZE_QUOTE_URL_MISSING') < probe.index('TRADEWIZE_HISTORY_URL_MISSING')
+assert probe.index('TRADEWIZE_HISTORY_URL_MISSING') < probe.index('VIOP_LIQUIDITY_UNVERIFIED')
 
 p.write_text(s)
 print('VIOP_R3_SOURCE_PATCH=PASS')
