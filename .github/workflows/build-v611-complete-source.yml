@@ -4,6 +4,8 @@ on:
   push:
     branches: [ v611-complete-source ]
     paths:
+      - 'backend_v611/**'
+      - '.ci/patch_viop_r3_source.py'
       - '.github/workflows/build-v611-complete-source.yml'
   workflow_dispatch:
 
@@ -72,10 +74,21 @@ jobs:
 
           Canonical source combines the verified V6.1.1 Android independent-preflight/reconnect source with the tested R3 VIOP backend, policy, production gateway and regression tests.
 
-          Included source guarantees fail-closed behavior for missing or invalid provider prerequisites. It does not invent provider endpoints, metadata, credentials, or history schemas.
+          Included source is fail-closed for missing or invalid provider prerequisites. It does not invent provider endpoints, metadata, credentials, or history schemas.
 
           External production dependencies still required for real TradeWize E2E: valid TRADEWIZE_API_KEY plus authoritative OAuth, universe/metadata, quote and history endpoint contracts. These values are deployment configuration and are intentionally not embedded in this source package or APK.
           EOF
+
+      - name: Verify application identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=complete_source/android/app/build.gradle.kts
+          grep -q 'namespace = "tr.borsatakip.v5"' "$F"
+          grep -q 'applicationId = "tr.borsatakip.v5"' "$F"
+          grep -q 'versionCode = 611' "$F"
+          grep -q 'versionName = "6.1.1"' "$F"
+          echo 'V611_APPLICATION_IDENTITY=PASS'
 
       - name: Backend regression suite
         shell: bash
@@ -102,17 +115,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build
           mkdir -p output
-          cp complete_source/android/app/build/outputs/apk/debug/app-debug.apk output/V6.1.1-COMPLETE-SOURCE-DEBUG.apk 2>/dev/null || true
-          # Rebuild the APK after cleaning build dirs only if the copy above was unavailable.
-          if [ ! -f output/V6.1.1-COMPLETE-SOURCE-DEBUG.apk ]; then
-            cd complete_source/android
-            ./gradlew --no-daemon assembleDebug
-            cd ../..
-            cp complete_source/android/app/build/outputs/apk/debug/app-debug.apk output/V6.1.1-COMPLETE-SOURCE-DEBUG.apk
-            rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build
-          fi
+          cp complete_source/android/app/build/outputs/apk/debug/app-debug.apk output/V6.1.1-COMPLETE-SOURCE-DEBUG.apk
+          rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build
           (cd complete_source && zip -qr ../output/V6.1.1-COMPLETE-SOURCE.zip .)
           cat > output/V6.1.1-COMPLETE-SOURCE-REPORT.md <<EOF
           # V6.1.1 Complete Source Build
@@ -120,6 +125,9 @@ jobs:
           - Branch: ${GITHUB_REF_NAME}
           - Commit: ${GITHUB_SHA}
           - Android verified base run: 36240927867
+          - Package: tr.borsatakip.v5
+          - versionName: 6.1.1
+          - versionCode: 611
           - Backend readiness regressions: PASS
           - TradeWize quota regressions: PASS
           - VIOP contract parser regressions: PASS
