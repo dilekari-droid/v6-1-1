@@ -17,6 +17,9 @@ jobs:
   build-complete-source:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,11 +107,13 @@ jobs:
 
       - name: Android unit test and debug build
         shell: bash
+        env:
+          BORSA_EXTERNAL_SIGNING: '1'
         run: |
           set -euo pipefail
           cd complete_source/android
           chmod +x gradlew
-          ./gradlew --no-daemon testReleaseUnitTest assembleDebug
+          ./gradlew --no-daemon --stacktrace testReleaseUnitTest assembleDebug
           test -f app/build/outputs/apk/debug/app-debug.apk
 
       - name: Package canonical source
