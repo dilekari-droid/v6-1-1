@@ -8,6 +8,6 @@ globalThis.Bun = {
   },
 };
 
-await import('../viop_sidecar_r5_bootstrap.mjs');
+await import('../viop_sidecar_r5_bootstrap_v2.mjs');
 console.log('V611_R5_BOOTSTRAP_PATCH_INVARIANTS=PASS');
 console.log('V611_R5_RUNTIME_STARTUP_WITHOUT_PROVIDER=PASS');
