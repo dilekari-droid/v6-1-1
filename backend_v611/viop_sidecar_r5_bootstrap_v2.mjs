@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
 const BASE_REF = 'a9094e80f73b8a369746b6ce77af28e62501e00b';
-const BASE_SHA256 = '93a6ff24b53b42a3a4a2200a69c7e3daa2d3e5ff73de0c8d487d7717b9ef1a30';
+const BASE_SHA256 = '3ec6a4d142381c25e090033d5b50dd9e70c7be65fc8b950e4565bd0a98a6b8f4';
+const BASE_BLOB_SHA1 = 'be9966293cc9a18edadd83311cb83c99267aaf0b';
 const ADAPTER_REF = 'f4f0aafc4df676362a71c8244eb76b329c0ff710';
 const ADAPTER_BLOB_SHA1 = '232e912141b906d6908b39a214516b1d332e4e2a';
 const RAW = 'https://raw.githubusercontent.com/dilekari-droid/v6-1-1';
@@ -153,6 +154,8 @@ function r5CapabilitySnapshot() {
 
 const base = await fetchText(RAW + '/' + BASE_REF + '/backend_v611/viop_sidecar_r4.mjs', 'R4_BASE');
 const baseHash = sha256(base);
+const baseBlob = gitBlobSha1(base);
+if (baseBlob !== BASE_BLOB_SHA1) throw new Error('R4_BASE_BLOB_INTEGRITY_FAILED ' + baseBlob);
 if (baseHash !== BASE_SHA256) throw new Error('R4_BASE_INTEGRITY_FAILED ' + baseHash);
 
 const adapter = await fetchText(RAW + '/' + ADAPTER_REF + '/backend_v611/tradewize_bars_adapter.mjs', 'BARS_ADAPTER');
@@ -210,6 +213,7 @@ source = replaceOnce(source, "console.log(`V611_HISTORY_ENDPOINT=${endpointConfi
 
 const patchedHash = sha256(source);
 await Bun.write('/tmp/viop_sidecar_r5.mjs', source);
+console.log('V611_R5_BASE_BLOB_SHA1=' + baseBlob);
 console.log('V611_R5_BASE_SHA256=' + baseHash);
 console.log('V611_R5_ADAPTER_BLOB_SHA1=' + adapterBlob);
 console.log('V611_R5_PATCHED_SHA256=' + patchedHash);
