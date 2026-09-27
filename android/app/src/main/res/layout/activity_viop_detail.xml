@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_screen_gradient">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="18dp"
+            android:paddingTop="16dp"
+            android:paddingEnd="18dp"
+            android:paddingBottom="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="VİOP"
+                android:textColor="@color/text_primary"
+                android:textSize="34sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/viopDetailSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:id="@+id/viopPriceCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/bg_viop_terminal_card"
+                android:orientation="horizontal"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.2"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/viopDetailPrice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textColor="@color/text_primary"
+                        android:textSize="32sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/viopDetailChange"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="—"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/viopDataState"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VERİ YOK"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/viopVolume"
+                        style="@style/Sub"
+                        android:layout_marginTop="8dp"
+                        android:text="Hacim —" />
+
+                    <TextView
+                        android:id="@+id/viopOpenInterest"
+                        style="@style/Sub"
+                        android:layout_marginTop="3dp"
+                        android:text="Açık Poz. —" />
+
+                    <TextView
+                        android:id="@+id/viopDataAge"
+                        style="@style/MetricLabel"
+                        android:layout_marginTop="5dp"
+                        android:text="Veri zamanı —" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/viopDetailStatusMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="9dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal"
+                android:weightSum="4">
+
+                <Button
+                    android:id="@+id/viopTabChart"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_viop_terminal_tab_selected"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="GRAFİK"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/viopTabDepth"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_viop_terminal_tab"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="DERİNLİK"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/viopTabSignal"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_viop_terminal_tab"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="SİNYAL"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/viopTabContract"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_viop_terminal_tab"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="SÖZLEŞME"
+                    android:textColor="@color/text_primary"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/viopGraphSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="ZAMAN"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="7dp"
+                    android:orientation="horizontal"
+                    android:weightSum="7">
+
+                    <Button android:id="@+id/viopTf1m" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="1D" android:textColor="@color/text_primary" android:textSize="10sp" android:textStyle="bold" />
+                    <Button android:id="@+id/viopTf3m" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="4dp" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="3D" android:textColor="@color/text_primary" android:textSize="10sp" android:textStyle="bold" />
+                    <Button android:id="@+id/viopTf5m" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="4dp" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab_selected" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="5D" android:textColor="@color/white" android:textSize="10sp" android:textStyle="bold" />
+                    <Button android:id="@+id/viopTf15m" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="4dp" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="15D" android:textColor="@color/text_primary" android:textSize="10sp" android:textStyle="bold" />
+                    <Button android:id="@+id/viopTf1h" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="4dp" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="1S" android:textColor="@color/text_primary" android:textSize="10sp" android:textStyle="bold" />
+                    <Button android:id="@+id/viopTf4h" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="4dp" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="4S" android:textColor="@color/text_primary" android:textSize="10sp" android:textStyle="bold" />
+                    <Button android:id="@+id/viopTf1d" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="4dp" android:layout_weight="1" android:background="@drawable/bg_viop_terminal_tab" android:minWidth="0dp" android:minHeight="0dp" android:padding="0dp" android:text="1G" android:textColor="@color/text_primary" android:textSize="10sp" android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/bg_viop_terminal_card"
+                    android:orientation="vertical"
+                    android:padding="10dp">
+
+                    <TextView
+                        android:id="@+id/viopChartTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="GRAFİK • VERİ BEKLENİYOR"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <tr.borsatakip.v5.ui.PriceChartView
+                        android:id="@+id/viopPriceChart"
+                        android:layout_width="match_parent"
+                        android:layout_height="310dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@color/bg"
+                        android:contentDescription="VİOP gerçek OHLCV grafiği"
+                        android:padding="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_viop_terminal_card"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView style="@style/SectionTitle" android:text="TEKNİK GÖSTERGELER" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="horizontal"
+                        android:weightSum="4">
+
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical"><TextView style="@style/MetricLabel" android:text="RSI"/><TextView android:id="@+id/viopRsi" style="@style/MetricValue" android:text="—"/></LinearLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical"><TextView style="@style/MetricLabel" android:text="MACD"/><TextView android:id="@+id/viopMacd" style="@style/MetricValue" android:text="—"/></LinearLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical"><TextView style="@style/MetricLabel" android:text="EMA20"/><TextView android:id="@+id/viopEma20" style="@style/MetricValue" android:text="—"/></LinearLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical"><TextView style="@style/MetricLabel" android:text="ATR"/><TextView android:id="@+id/viopAtr" style="@style/MetricValue" android:text="—"/></LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_viop_terminal_card"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp"
+                    android:weightSum="3">
+
+                    <TextView android:id="@+id/viopActionLong" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="↗ ALIŞ" android:textColor="@color/green" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/viopActionShort" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="↘ SATIŞ" android:textColor="@color/red" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/viopActionWatch" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="☆ TAKİP" android:textColor="@color/text_primary" android:textSize="15sp" android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal"
+                    android:weightSum="2">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_viop_terminal_card"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+                        <TextView style="@style/SectionTitle" android:text="SÖZLEŞME BİLGİSİ" />
+                        <TextView android:id="@+id/viopSummaryContract" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:lineSpacingExtra="3dp" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_viop_terminal_card"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+                        <TextView style="@style/SectionTitle" android:text="SİNYAL ÖZETİ" />
+                        <TextView android:id="@+id/viopSummarySignal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:lineSpacingExtra="3dp" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/viopDepthSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_viop_terminal_card"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+                <TextView style="@style/SectionTitle" android:text="PİYASA DERİNLİĞİ" />
+                <TextView android:id="@+id/viopDepthBid" style="@style/Sub" android:layout_marginTop="14dp" android:text="Alış —" />
+                <TextView android:id="@+id/viopDepthAsk" style="@style/Sub" android:layout_marginTop="7dp" android:text="Satış —" />
+                <TextView android:id="@+id/viopDepthSpread" style="@style/Sub" android:layout_marginTop="7dp" android:text="Spread —" />
+                <TextView android:id="@+id/viopDepthNote" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Kademe bazlı piyasa derinliği mevcut backend sözleşmesinde yoksa değer üretilmez." android:textColor="@color/text_muted" android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/viopSignalSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_viop_terminal_card"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+                <TextView style="@style/SectionTitle" android:text="SİNYAL DETAYI" />
+                <TextView android:id="@+id/viopSignalDirection" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="SİNYAL YOK" android:textColor="@color/text_secondary" android:textSize="24sp" android:textStyle="bold" />
+                <TextView android:id="@+id/viopSignalScore" style="@style/Sub" android:layout_marginTop="9dp" />
+                <TextView android:id="@+id/viopSignalConfidence" style="@style/Sub" android:layout_marginTop="6dp" />
+                <TextView android:id="@+id/viopSignalRisk" style="@style/Sub" android:layout_marginTop="6dp" />
+                <TextView android:id="@+id/viopSignalReason" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:lineSpacingExtra="3dp" android:textColor="@color/text_secondary" android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/viopContractSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_viop_terminal_card"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+                <TextView style="@style/SectionTitle" android:text="SÖZLEŞME" />
+                <TextView android:id="@+id/viopContractBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:lineSpacingExtra="5dp" android:textColor="@color/text_secondary" android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/include_bottom_nav" />
+</LinearLayout>

@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_screen_gradient"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="6dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/stocksTitle"
+                    style="@style/Title"
+                    android:text="Hisseler"
+                    android:textSize="28sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Borsa İstanbul Hisse Senetleri"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <TextView
+                android:id="@+id/stocksFavorites"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:gravity="center"
+                android:text="☆"
+                android:textColor="@color/blue"
+                android:textSize="29sp" />
+            <TextView
+                android:id="@+id/stocksSettings"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:gravity="center"
+                android:text="⚙"
+                android:textColor="@color/text_secondary"
+                android:textSize="24sp" />
+            <TextView
+                android:id="@+id/stocksNotifications"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:gravity="center"
+                android:text="●"
+                android:textColor="@color/red"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="76dp"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="8dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST 100" android:textColor="@color/text_secondary" android:textSize="10sp" />
+                <TextView android:id="@+id/index100Value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Veri yok" android:textColor="@color/text_primary" android:textSize="13sp" android:textStyle="bold" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/index100Change" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="—" android:textColor="@color/text_secondary" android:textSize="9sp" />
+                    <tr.borsatakip.v5.ui.StockSparklineView android:id="@+id/index100Chart" android:layout_width="48dp" android:layout_height="24dp" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="2dp"
+                android:layout_marginEnd="2dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="8dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST 30" android:textColor="@color/text_secondary" android:textSize="10sp" />
+                <TextView android:id="@+id/index30Value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Veri yok" android:textColor="@color/text_primary" android:textSize="13sp" android:textStyle="bold" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/index30Change" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="—" android:textColor="@color/text_secondary" android:textSize="9sp" />
+                    <tr.borsatakip.v5.ui.StockSparklineView android:id="@+id/index30Chart" android:layout_width="48dp" android:layout_height="24dp" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="8dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST TÜM" android:textColor="@color/text_secondary" android:textSize="10sp" />
+                <TextView android:id="@+id/indexAllValue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Veri yok" android:textColor="@color/text_primary" android:textSize="13sp" android:textStyle="bold" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/indexAllChange" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="—" android:textColor="@color/text_secondary" android:textSize="9sp" />
+                    <tr.borsatakip.v5.ui.StockSparklineView android:id="@+id/indexAllChart" android:layout_width="48dp" android:layout_height="24dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/stocksFilterAll" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:text="Tümü" />
+                <Button android:id="@+id/stocksFilterLong" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:layout_marginStart="5dp" android:text="LONG" />
+                <Button android:id="@+id/stocksFilterShort" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:layout_marginStart="5dp" android:text="SHORT" />
+                <Button android:id="@+id/stocksFilterBist30" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:layout_marginStart="5dp" android:text="BIST 30" />
+                <Button android:id="@+id/stocksFilterBank" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:layout_marginStart="5dp" android:text="Bankacılık" />
+                <Button android:id="@+id/stocksFilterIndustry" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:layout_marginStart="5dp" android:text="Sanayi" />
+                <Button android:id="@+id/stocksFilterTech" style="@style/ScanFilterButton" android:layout_height="42dp" android:minHeight="42dp" android:layout_marginStart="5dp" android:text="Teknoloji" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <EditText
+            android:id="@+id/stocksSearch"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="7dp"
+            android:background="@drawable/bg_input"
+            android:hint="Hisse sembol veya şirket adı ara"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:singleLine="true"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_muted"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/stocksStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/stocksList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingStart="10dp"
+        android:paddingTop="3dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="4dp" />
+
+    <LinearLayout
+        android:id="@+id/stocksScanCard"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_card_blue"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="▥  Hisse Tarama\nTeknik kriterlere göre fırsatları keşfet"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/stocksScanAction"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="Taramayı Aç  ›"
+            android:textColor="@color/blue"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <include layout="@layout/include_bottom_nav" />
+</LinearLayout>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:background="@drawable/bg_card"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:minHeight="72dp"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingEnd="8dp">
+        <TextView android:id="@+id/indicatorName" style="@style/SectionTitle"/>
+        <TextView android:id="@+id/indicatorHint" style="@style/Sub" android:layout_marginTop="2dp"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/indicatorValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_primary"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:maxLines="1"
+        android:layout_marginEnd="10dp"/>
+
+    <TextView
+        android:id="@+id/indicatorState"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="72dp"
+        android:minHeight="40dp"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:maxLines="1"
+        android:singleLine="true"
+        android:ellipsize="none"
+        android:includeFontPadding="true"
+        android:background="@drawable/bg_chip"
+        android:textStyle="bold"
+        android:textSize="12sp"
+        android:textColor="@color/green"/>
+</LinearLayout>

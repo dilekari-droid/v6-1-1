@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:name=".BorsaTakipApp"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.BorsaTakip">
+        <service
+            android:name=".worker.RealtimeAlertService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled continuous realtime BIST market monitoring and opportunity alerts" />
+        </service>
+        <service
+            android:name=".worker.BistScanForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started finite BIST market scan that must continue while the screen is locked or the app is backgrounded" />
+        </service>
+        <service
+            android:name=".worker.AutoScanForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled periodic BIST market scanning below WorkManager minimum cadence" />
+        </service>
+        <receiver
+            android:name=".worker.BootCompletedReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <activity android:name=".ui.MarketInstrumentDetailActivity" />
+        <activity android:name=".ui.FullscreenChartActivity" />
+        <activity android:name=".ui.ScanResultsActivity" />
+        <activity android:name=".ui.NotificationsActivity" />
+        <activity android:name=".ui.ViopDetailActivity" />
+        <activity android:name=".ui.ViopContractsActivity" />
+        <activity android:name=".ui.NewsActivity" />
+        <activity android:name=".ui.TechnicalAnalysisActivity" />
+        <activity android:name=".ui.StocksActivity" />
+        <activity android:name=".ui.SettingsDetailActivity" />
+        <activity android:name=".ui.SettingsSearchActivity" />
+        <activity android:name=".ui.SettingsActivity" />
+        <activity android:name=".ui.FavoritesActivity" />
+        <activity android:name=".ui.ViopActivity" />
+        <activity android:name=".ui.SignalHistoryActivity" />
+        <activity android:name=".ui.StockDetailActivity" />
+        <activity android:name=".ui.OpportunityActivity" />
+        <activity android:name=".ui.DynamicMarketScanActivity" />
+        <activity android:name=".ui.BistScanActivity" />
+        <activity android:name=".ui.MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

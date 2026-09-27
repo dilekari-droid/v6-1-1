@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/bg_screen_gradient">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+        <TextView android:id="@+id/newsTitle" style="@style/Title" android:text="@string/auto_text_6ccd61a277"/>
+        <TextView android:id="@+id/newsSubtitle" style="@style/Sub" android:layout_marginTop="3dp"/>
+        <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:scrollbars="none">
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/newsAll" style="@style/FilterButton" android:text="@string/auto_text_a39264d52a"/>
+                <Button android:id="@+id/newsKap" style="@style/FilterButton" android:layout_marginStart="5dp" android:text="@string/auto_text_f54fba0801"/>
+                <Button android:id="@+id/newsCompany" style="@style/FilterButton" android:layout_marginStart="5dp" android:text="@string/auto_text_273ee02205"/>
+                <Button android:id="@+id/newsSector" style="@style/FilterButton" android:layout_marginStart="5dp" android:text="@string/auto_text_397bed63fe"/>
+                <Button android:id="@+id/newsMarket" style="@style/FilterButton" android:layout_marginStart="5dp" android:text="@string/auto_text_1d715d2101"/>
+            </LinearLayout>
+        </HorizontalScrollView>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:layout_marginTop="10dp">
+            <ProgressBar android:id="@+id/newsProgress" android:layout_width="24dp" android:layout_height="24dp"/>
+            <TextView android:id="@+id/newsStatus" style="@style/Sub" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="8dp"/>
+            <Button android:id="@+id/newsRetry" android:layout_width="wrap_content" android:layout_height="48dp" android:text="@string/auto_text_92cd7f4a33" android:visibility="gone"/>
+        </LinearLayout>
+    </LinearLayout>
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/newsList" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:paddingHorizontal="12dp" android:clipToPadding="false"/>
+    <include layout="@layout/include_bottom_nav"/>
+</LinearLayout>

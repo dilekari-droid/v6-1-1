@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/bottomNav"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:orientation="horizontal"
+    android:gravity="center"
+    android:background="@color/bottom_nav"
+    android:elevation="12dp">
+    <TextView android:id="@+id/navHome" style="@style/NavItem" android:text="@string/auto_text_c25a07817d" />
+    <TextView android:id="@+id/navBist" style="@style/NavItem" android:text="@string/auto_text_98af2474f3" />
+    <TextView android:id="@+id/navViop" style="@style/NavItem" android:text="@string/auto_text_e51ef02035" />
+    <TextView android:id="@+id/navFav" style="@style/NavItem" android:text="@string/auto_text_e789e8d548" />
+    <TextView android:id="@+id/navSettings" style="@style/NavItem" android:text="@string/auto_text_1d5bdf9779" />
+</LinearLayout>

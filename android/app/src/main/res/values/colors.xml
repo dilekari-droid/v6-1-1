@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#031522</color><color name="surface">#062238</color><color name="surface_2">#092C43</color>
+    <color name="stroke">#15506E</color><color name="stroke_soft">#0D3A53</color><color name="bottom_nav">#001421</color>
+    <color name="text_primary">#FFFFFF</color><color name="text_secondary">#8FA3B8</color><color name="text_muted">#7F9AB0</color>
+    <color name="blue">#159FF0</color><color name="blue_dark">#087BE8</color><color name="green">#00E676</color><color name="green_strong">#00FF88</color>
+    <color name="yellow">#FFD21C</color><color name="orange">#FF9D2E</color><color name="red">#FF3B4D</color><color name="red_strong">#FF1744</color><color name="purple">#7040FF</color>
+    <color name="white">#FFFFFF</color><color name="transparent">#00000000</color><color name="chip_bg">#08293D</color>
+</resources>

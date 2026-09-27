@@ -1,0 +1,501 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_screen_gradient">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="18dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="50dp"
+                    android:layout_height="50dp"
+                    android:gravity="center"
+                    android:text="▥"
+                    android:textColor="@color/blue"
+                    android:textSize="30sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingStart="8dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST Tarama" android:textColor="@color/white" android:textSize="25sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="Piyasalarda fırsatları yakalayın" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="46dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnBistNotifications"
+                        android:layout_width="38dp"
+                        android:layout_height="46dp"
+                        android:contentDescription="Bildirimler"
+                        android:gravity="center"
+                        android:text="●"
+                        android:textColor="@color/red"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnBistSettings"
+                        android:layout_width="38dp"
+                        android:layout_height="46dp"
+                        android:contentDescription="Ayarlar"
+                        android:gravity="center"
+                        android:text="⚙"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="20sp" />
+
+                    <TextView
+                        android:id="@+id/btnBistTheme"
+                        android:layout_width="38dp"
+                        android:layout_height="46dp"
+                        android:contentDescription="Görünüm ayarları"
+                        android:gravity="center"
+                        android:text="☾"
+                        android:textColor="@color/blue"
+                        android:textSize="20sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Gerçek piyasa özeti: yalnız provider'dan gelen doğrulanmış endeks verileri -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="86dp"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_market_tile"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST 100" android:textColor="@color/text_secondary" android:textSize="9sp"/>
+                    <TextView android:id="@+id/scanIndex100Value" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="—" android:textColor="@color/white" android:textSize="14sp" android:textStyle="bold"/>
+                    <TextView android:id="@+id/scanIndex100Change" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Veri bekleniyor" android:textColor="@color/text_secondary" android:textSize="8sp"/>
+                    <tr.borsatakip.v5.ui.StockSparklineView android:id="@+id/scanIndex100Chart" android:layout_width="match_parent" android:layout_height="24dp" android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_market_tile"
+                    android:orientation="vertical"
+                    android:padding="8dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST 30" android:textColor="@color/text_secondary" android:textSize="9sp"/>
+                    <TextView android:id="@+id/scanIndex30Value" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="—" android:textColor="@color/white" android:textSize="14sp" android:textStyle="bold"/>
+                    <TextView android:id="@+id/scanIndex30Change" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Veri bekleniyor" android:textColor="@color/text_secondary" android:textSize="8sp"/>
+                    <tr.borsatakip.v5.ui.StockSparklineView android:id="@+id/scanIndex30Chart" android:layout_width="match_parent" android:layout_height="24dp" android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_market_tile"
+                    android:orientation="vertical"
+                    android:padding="6dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BIST TÜM" android:textColor="@color/text_secondary" android:textSize="9sp"/>
+                    <TextView android:id="@+id/scanIndexAllValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="—" android:textColor="@color/white" android:textSize="13sp" android:textStyle="bold"/>
+                    <TextView android:id="@+id/scanIndexAllChange" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Veri bekleniyor" android:textColor="@color/text_secondary" android:textSize="8sp"/>
+                    <tr.borsatakip.v5.ui.StockSparklineView android:id="@+id/scanIndexAllChart" android:layout_width="match_parent" android:layout_height="24dp" android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_market_tile"
+                    android:orientation="vertical"
+                    android:padding="6dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="XUTUM 5 DK Hacmi" android:textColor="@color/text_secondary" android:textSize="9sp"/>
+                    <TextView android:id="@+id/scanMarketVolumeValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="—" android:textColor="@color/white" android:textSize="13sp" android:textStyle="bold"/>
+                    <TextView android:id="@+id/scanMarketVolumeStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:maxLines="2" android:text="Veri bekleniyor" android:textColor="@color/text_secondary" android:textSize="8sp"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Search + filter -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/scanSearch"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_input"
+                    android:hint="⌕  Hisse, sektör veya kriter ara..."
+                    android:inputType="textCapCharacters"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="12dp"
+                    android:singleLine="true"
+                    android:textColor="@color/white"
+                    android:textColorHint="@color/text_muted"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/btnSearchFocus"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_card"
+                    android:gravity="center"
+                    android:text="☷"
+                    android:textColor="@color/blue"
+                    android:textSize="23sp"
+                    android:contentDescription="Tarama filtresi" />
+            </LinearLayout>
+
+            <!-- Quick modes -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/quickPopular"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="5dp"
+                    android:background="@drawable/bg_chip_selected_blue"
+                    android:gravity="center"
+                    android:text="🔥  Popüler  ›"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/quickFavorites"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="5dp"
+                    android:background="@drawable/bg_chip_outline"
+                    android:gravity="center"
+                    android:text="★  Favorilerim  ›"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/quickCustom"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:background="@drawable/bg_chip_outline"
+                    android:gravity="center"
+                    android:text="☷  Özel Tarama  ›"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Single scan interval control -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/btnScanTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:background="@drawable/bg_chip_outline"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="Tarama zamanı seç">
+
+                    <TextView
+                        android:layout_width="28dp"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:text="◷"
+                        android:textColor="@color/blue"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:paddingStart="8dp"
+                        android:text="TARAMA ZAMANI"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txtScanTimeArrow"
+                        android:layout_width="36dp"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:text="˅"
+                        android:textColor="@color/blue"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/txtActiveScanTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:paddingStart="4dp"
+                    android:text="Aktif Tarama: 5 DK"
+                    android:textColor="@color/blue"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtActiveTimeframeDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_card"
+                    android:padding="10dp"
+                    android:text="BIST hisseleri 5 DK verileri üzerinden taranacak\nOHLCV: 5 DK • Teknik analiz: 5 DK\nTrend: 5 DK • Momentum: 5 DK\nHacim: 5 DK • Kırılım: 5 DK"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="2dp" />
+            </LinearLayout>
+
+            <!-- Automatic scan cadence -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_card"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="OTOMATİK TARAMA"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/txtAutoScanStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="Kapalı • Manuel tarama"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switchAutoScan"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:showText="false"
+                    android:contentDescription="Otomatik taramayı aç veya kapat" />
+            </LinearLayout>
+
+            <!-- Hero scan state: tek gerçek state kaynağı -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_scan_hero"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="52dp"
+                        android:layout_height="52dp"
+                        android:background="@drawable/bg_card_blue"
+                        android:gravity="center"
+                        android:text="⌕"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="30sp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:paddingStart="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+                            <TextView android:id="@+id/txtScanHeroEyebrow" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="BIST hisseleri taranıyor" android:textColor="@color/blue" android:textSize="12sp" android:textStyle="bold" />
+                            <TextView android:id="@+id/txtStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_chip_outline" android:paddingStart="8dp" android:paddingTop="4dp" android:paddingEnd="8dp" android:paddingBottom="4dp" android:text="HAZIR" android:textColor="@color/blue" android:textSize="10sp" android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView android:id="@+id/txtProgress" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="TARAMA BAŞLAMADI" android:textColor="@color/white" android:textSize="22sp" android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView android:id="@+id/txtScanHeroSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Kriterlerinizi seçip taramayı başlatın." android:textColor="@color/text_secondary" android:textSize="12sp" />
+                <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="7dp" android:layout_marginTop="10dp" android:max="100" android:progress="0" android:visibility="gone" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical">
+                    <TextView android:id="@+id/txtCurrentSymbol" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="İşlenen: —" android:textColor="@color/text_primary" android:textSize="11sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/txtProviderStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Kaynak: doğrulanmadı" android:textColor="@color/text_secondary" android:textSize="10sp" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView android:id="@+id/txtLastUpdate" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Son güncelleme: —" android:textColor="@color/text_muted" android:textSize="10sp" />
+                        <TextView android:id="@+id/txtElapsed" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="8dp" android:text="Süre: —" android:textColor="@color/text_secondary" android:textSize="10sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/btnStatusDetail" android:layout_width="72dp" android:layout_height="32dp" android:gravity="center" android:text="Detay  ˅" android:textColor="@color/blue" android:textSize="10sp" android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Expandable technical detail; ana durum kartı değildir -->
+            <LinearLayout
+                android:id="@+id/scanDetailPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_info_compact"
+                android:orientation="vertical"
+                android:padding="12dp"
+                android:visibility="gone">
+                <TextView android:id="@+id/txtSource" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Kaynak hazırlanıyor..." android:textColor="@color/text_secondary" android:textSize="11sp" />
+                <TextView android:id="@+id/txtDebugState" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:lineSpacingExtra="2dp" android:text="Foreground scan state hazırlanıyor." android:textColor="@color/text_muted" android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Tek birleşik ARA / MERCEK / DURDUR kontrolü -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btnStartScan"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_primary_scan"
+                    android:backgroundTint="@null"
+                    android:text="ARA"
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/btnScanFilter"
+                    android:layout_width="56dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@drawable/bg_card_blue"
+                    android:gravity="center"
+                    android:text="⌕"
+                    android:textColor="@color/blue"
+                    android:textSize="24sp"
+                    android:contentDescription="Tarama filtresi" />
+                <Button
+                    android:id="@+id/btnStopScan"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_secondary_scan"
+                    android:backgroundTint="@null"
+                    android:enabled="false"
+                    android:text="DURDUR"
+                    android:textColor="@color/red"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Compact info -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="9dp"
+                android:background="@drawable/bg_info_compact"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="12dp">
+                <TextView android:layout_width="36dp" android:layout_height="44dp" android:gravity="center" android:text="ⓘ" android:textColor="@color/blue" android:textSize="21sp" />
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:lineSpacingExtra="2dp" android:text="Tarama ilerlemesi gerçek işlem durumundan hesaplanır.\nVeri sağlayıcı hazır değilse tarama başlatılamaz." android:textColor="@color/text_secondary" android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- Quick access -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Hızlı Erişim" android:textColor="@color/white" android:textSize="16sp" android:textStyle="bold" />
+                <TextView android:id="@+id/btnAllTools" android:layout_width="wrap_content" android:layout_height="40dp" android:gravity="center" android:text="Tüm Araçlar  ›" android:textColor="@color/blue" android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/quickSectors" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="4dp" android:background="@drawable/bg_card" android:gravity="center" android:text="▥\nSektörler" android:textColor="@color/text_primary" android:textSize="11sp" />
+                <TextView android:id="@+id/quickCriteria" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/bg_card" android:gravity="center" android:text="☷\nKriterler" android:textColor="@color/text_primary" android:textSize="11sp" />
+                <TextView android:id="@+id/quickHistory" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/bg_card" android:gravity="center" android:text="◷\nGeçmiş\nTaramalar" android:textColor="@color/text_primary" android:textSize="10sp" />
+                <TextView android:id="@+id/quickSaved" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginStart="4dp" android:background="@drawable/bg_card" android:gravity="center" android:text="▮\nKayıtlı\nAramalar" android:textColor="@color/text_primary" android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/include_bottom_nav" />
+</LinearLayout>
