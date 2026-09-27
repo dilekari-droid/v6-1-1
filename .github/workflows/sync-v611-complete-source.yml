@@ -27,7 +27,8 @@ jobs:
           node --check backend_v611/viop_r3_policy.mjs
           node --check backend_v611/viop_sidecar_r3.mjs
           node --check backend_v611/production_gateway_r3.mjs
-          python -m unittest discover -s backend_v611/tests -p 'test_*.py'
+          python -m pip install -q pytest
+          python -m pytest -q backend_v611/tests
           node backend_v611/tests/test_viop_r3_policy_fixed.mjs
           node backend_v611/tests/test_production_gateway_r3.mjs
       - name: Commit canonical source sync
