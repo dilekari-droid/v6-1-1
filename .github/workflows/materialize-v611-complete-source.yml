@@ -1,0 +1,103 @@
+name: Materialize V6.1.1 Complete Source
+
+on:
+  push:
+    branches: [ v611-complete-source ]
+    paths:
+      - '.github/workflows/materialize-v611-complete-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download verified Android source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/v611-materialize
+          mkdir -p /tmp/v611-materialize
+          gh run download 36240927867 -R "${GITHUB_REPOSITORY}" -n V6.1.1-VIOP-INDEPENDENT-PREFLIGHT-PACKAGE -D /tmp/v611-materialize
+          BASE_SOURCE=$(find /tmp/v611-materialize -type f -name 'V6.1.1-VIOP-INDEPENDENT-PREFLIGHT-SOURCE.zip' -print -quit)
+          test -n "$BASE_SOURCE"
+          mkdir -p /tmp/v611-materialize/src
+          unzip -q "$BASE_SOURCE" -d /tmp/v611-materialize/src
+          test -x /tmp/v611-materialize/src/android/gradlew
+          test -f /tmp/v611-materialize/src/android/app/build.gradle.kts
+
+      - name: Materialize Android tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf android
+          cp -a /tmp/v611-materialize/src/android ./android
+          rm -rf android/.gradle android/.kotlin android/app/build android/build
+          F=android/app/build.gradle.kts
+          grep -q 'namespace = "tr.borsatakip.v5"' "$F"
+          grep -q 'applicationId = "tr.borsatakip.v5"' "$F"
+          grep -q 'versionCode = 611' "$F"
+          grep -q 'versionName = "6.1.1"' "$F"
+          test -f android/app/src/main/java/tr/borsatakip/v5/data/BackendPreflightClient.kt
+          test -f android/app/src/main/java/tr/borsatakip/v5/data/ProviderReadinessService.kt
+          echo 'V611_ANDROID_SOURCE_MATERIALIZED=PASS'
+
+      - name: Add source configuration templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .env.example <<'EOF'
+          # Application/backend authentication key. Keep secret in deployment environment.
+          BORSA_API_KEY=
+          APP_API_KEY=
+
+          # TradeWize production configuration. Do not embed secrets in Android/APK.
+          TRADEWIZE_API_KEY=
+          TRADEWIZE_OAUTH_URL=
+          TRADEWIZE_UNIVERSE_URL=
+          TRADEWIZE_QUOTE_URL_TEMPLATE=
+          TRADEWIZE_HISTORY_URL_TEMPLATE=
+          TRADEWIZE_MIN_INTERVAL_MS=1000
+
+          # Gateway wiring.
+          VIOP_SIDECAR_URL=
+          LEGACY_BACKEND_URL=
+          EOF
+          cat > SOURCE_STATUS.md <<'EOF'
+          # V6.1.1 Complete Source
+
+          This branch is the canonical self-contained V6.1.1 source tree.
+
+          Included:
+          - full Android source for package tr.borsatakip.v5, versionName 6.1.1, versionCode 611;
+          - independent VIOP preflight and realtime reconnect hardening;
+          - tested R3 VIOP policy, sidecar and production gateway;
+          - backend readiness, quota, contract parser and R3 runtime regression tests;
+          - fail-closed handling for missing/invalid provider prerequisites.
+
+          External production configuration is intentionally not embedded. Real TradeWize E2E still requires a valid production provider credential and authoritative OAuth/universe-metadata/quote/history endpoint contracts.
+          EOF
+
+      - name: Commit materialized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A android .env.example SOURCE_STATUS.md
+          if git diff --cached --quiet; then
+            echo 'V611_COMPLETE_SOURCE_ALREADY_MATERIALIZED=PASS'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'source: materialize complete V6.1.1 Android tree'
+          git push origin HEAD:v611-complete-source
