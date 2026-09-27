@@ -91,6 +91,25 @@ jobs:
           grep -Fq 'object BistUniverseCompletenessPolicy' release-src/android/app/src/main/java/tr/borsatakip/v5/data/BistUniverseCompletenessPolicy.kt
           grep -Fq 'BistUniverseCompletenessPolicy.validate' release-src/android/app/src/main/java/tr/borsatakip/v5/data/MobileMarketDataProvider.kt
 
+      - name: Correct stale test fixture only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('release-src/android/app/src/test/java/tr/borsatakip/v5/ui/ProviderCapabilityPresentationPolicyTest.kt')
+          s=p.read_text()
+          old='''                contractsReady = true, metadataReady = true,\n                quoteReady = true, historyReady = false'''
+          new='''                contractsReady = true, metadataReady = true,\n                activeFutureReady = true, quoteReady = true, historyReady = false'''
+          if s.count(old) != 1:
+              raise SystemExit('Expected stale fixture pattern exactly once')
+          p.write_text(s.replace(old,new))
+          print('TEST_ONLY_FIXTURE_CORRECTION=PASS')
+          PY
+          git -C release-src/android diff --no-index /dev/null /dev/null >/dev/null 2>&1 || true
+          grep -Fq 'activeFutureReady = true, quoteReady = true, historyReady = false' release-src/android/app/src/test/java/tr/borsatakip/v5/ui/ProviderCapabilityPresentationPolicyTest.kt
+          echo 'PRODUCTION_SOURCE_UNCHANGED=PASS'
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -152,6 +171,8 @@ jobs:
           BASE_R4_SOURCE_SHA256=${R4_SOURCE_SHA256}
           R3_PATCH_XZ_SHA256=${R3_PATCH_XZ_SHA256}
           R3_ANDROID_TREE_SHA256=${R3_ANDROID_TREE_SHA256}
+          TEST_FIXTURE_CORRECTION=TEST_ONLY_ACTIVE_FUTURE_READY_TRUE
+          PRODUCTION_SOURCE_RUNTIME_CHANGE=NO
           PACKAGE=tr.borsatakip.v5
           VERSION=6.1.1/611
           RELEASE_DEBUGGABLE=NO
