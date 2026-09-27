@@ -1,8 +1,8 @@
-name: Build V6.1.1 Complete Source
+name: Build V6.1.1 Complete Source R4
 
 on:
   push:
-    branches: [ v611-complete-source ]
+    branches: [ v611-complete-source-r4 ]
     paths:
       - 'android/**'
       - 'backend_v611/**'
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build-complete-source:
+  build-complete-source-r4:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -32,7 +32,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Assemble self-contained source tree
+      - name: Assemble self-contained R4 source tree
         shell: bash
         run: |
           set -euo pipefail
@@ -41,6 +41,8 @@ jobs:
           test -f backend_v611/viop_r3_policy.mjs
           test -f backend_v611/viop_sidecar_r3.mjs
           test -f backend_v611/production_gateway_r3.mjs
+          test -f backend_v611/viop_sidecar_r4.mjs
+          test -f backend_v611/VIOP_R4_RUNTIME_CONFIG.md
           rm -rf complete_source
           mkdir -p complete_source/ci
           cp -a android complete_source/android
@@ -51,7 +53,7 @@ jobs:
           cp .github/workflows/materialize-v611-complete-source.yml complete_source/ci/
           cp .github/workflows/build-v611-complete-source.yml complete_source/ci/
           rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build
-          echo 'V611_SELF_CONTAINED_SOURCE=PASS'
+          echo 'V611_R4_SELF_CONTAINED_SOURCE=PASS'
 
       - name: Verify application identity and source safety
         shell: bash
@@ -84,6 +86,26 @@ jobs:
           PY
           echo 'V611_APPLICATION_IDENTITY=PASS'
 
+      - name: Verify VIOP R4 runtime guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check complete_source/backend_v611/viop_sidecar_r4.mjs
+          F=complete_source/backend_v611/viop_sidecar_r4.mjs
+          grep -q "TRADEWIZE_AUTH_MODE" "$F"
+          grep -q "TRADEWIZE_ACCESS_TOKEN" "$F"
+          grep -q "TRADEWIZE_DETAILS_URL" "$F"
+          grep -q "TRADEWIZE_HISTORY_URL_TEMPLATE" "$F"
+          grep -q "'/v1/viop/health'" "$F"
+          grep -q "metadataInvalidCount===0" "$F"
+          grep -q "NO_CONTRACT_UNIVERSE" "$F"
+          grep -q "NO_METADATA" "$F"
+          grep -q "NO_LIVE_QUOTE" "$F"
+          grep -q "STALE_QUOTE" "$F"
+          grep -q "MARKET_CLOSED" "$F"
+          grep -q "NO_HISTORY" "$F"
+          echo 'V611_VIOP_R4_GUARDS=PASS'
+
       - name: Backend regression suite
         shell: bash
         run: |
@@ -92,6 +114,7 @@ jobs:
           node --check backend_v611/viop_r3_policy.mjs
           node --check backend_v611/viop_sidecar_r3.mjs
           node --check backend_v611/production_gateway_r3.mjs
+          node --check backend_v611/viop_sidecar_r4.mjs
           for t in backend_v611/tests/test_*.py; do echo "RUN $t"; PYTHONPATH=. python "$t"; done
           node backend_v611/tests/test_viop_r3_policy_fixed.mjs
           node backend_v611/tests/test_production_gateway_r3.mjs
@@ -124,19 +147,21 @@ jobs:
           echo 'V611_DEBUG_APK_SIGNATURE=PASS'
           echo 'V611_DEBUG_APK_IDENTITY=PASS'
 
-      - name: Package canonical source
+      - name: Package R4 canonical source
         shell: bash
         run: |
           set -euo pipefail
-          cp complete_source/android/app/build/outputs/apk/debug/app-debug.apk output/V6.1.1-COMPLETE-SOURCE-DEBUG.apk
+          cp complete_source/android/app/build/outputs/apk/debug/app-debug.apk output/V6.1.1-COMPLETE-SOURCE-R4-DEBUG.apk
           rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build complete_source/backend_v611/__pycache__ complete_source/backend_v611/tests/__pycache__
-          (cd complete_source && zip -qr ../output/V6.1.1-COMPLETE-SOURCE.zip .)
-          cat > output/V6.1.1-COMPLETE-SOURCE-REPORT.md <<EOF
-          # V6.1.1 Complete Source Build
+          (cd complete_source && zip -qr ../output/V6.1.1-COMPLETE-SOURCE-R4.zip .)
+          cat > output/V6.1.1-COMPLETE-SOURCE-R4-REPORT.md <<EOF
+          # V6.1.1 Complete Source R4 Build
 
           - Branch: ${GITHUB_REF_NAME}
           - Commit: ${GITHUB_SHA}
           - Self-contained Android + backend source: PASS
+          - VIOP R4 runtime source included: PASS
+          - VIOP R4 syntax/static guards: PASS
           - Package: tr.borsatakip.v5
           - versionName: 6.1.1
           - versionCode: 611
@@ -144,23 +169,22 @@ jobs:
           - targetSdk: 35
           - Hardcoded btk token scan: PASS
           - Private-key PEM scan: PASS
-          - Backend readiness regressions: PASS
-          - TradeWize quota regressions: PASS
-          - VIOP contract parser regressions: PASS
+          - Backend regression suite: PASS
           - R3 policy regression: PASS
-          - R3 production gateway runtime: PASS
+          - R3 production gateway regression: PASS
           - Android testReleaseUnitTest: PASS
           - Android assembleDebug: PASS
           - Debug APK identity/signature verification: PASS
-          - Real TradeWize production E2E: NOT_RUN / BLOCKED by external credential + authoritative endpoint contract
+          - Railway R4 deployment health: verified separately
+          - Real TradeWize production E2E: BLOCKED by missing production credential/auth contract + authoritative history/OHLC endpoint
           - Production release signing: NOT_RUN / external release key required
           EOF
-          (cd output && sha256sum V6.1.1-COMPLETE-SOURCE.zip V6.1.1-COMPLETE-SOURCE-DEBUG.apk > SHA256SUMS.txt)
+          (cd output && sha256sum V6.1.1-COMPLETE-SOURCE-R4.zip V6.1.1-COMPLETE-SOURCE-R4-DEBUG.apk > SHA256SUMS-R4.txt)
 
-      - name: Upload complete package
+      - name: Upload complete R4 package
         uses: actions/upload-artifact@v4
         with:
-          name: V6.1.1-COMPLETE-SOURCE-PACKAGE
+          name: V6.1.1-COMPLETE-SOURCE-R4-PACKAGE
           if-no-files-found: error
           path: output/*
           retention-days: 30
