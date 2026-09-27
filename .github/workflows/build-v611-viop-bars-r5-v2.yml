@@ -1,0 +1,218 @@
+name: V6.1.1 VIOP Bars R5 V2
+
+on:
+  push:
+    branches: [ v611-viop-bars-r5 ]
+    paths:
+      - 'backend_v611/tradewize_bars_adapter.mjs'
+      - 'backend_v611/viop_sidecar_r5_bootstrap_v2.mjs'
+      - 'backend_v611/tests/test_tradewize_bars_adapter.mjs'
+      - 'backend_v611/tests/test_viop_sidecar_r5_bootstrap.mjs'
+      - '.github/workflows/build-v611-viop-bars-r5-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+      RELEASE_KEYSTORE_B64: ${{ secrets.BORSA_KEYSTORE_B64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.BORSA_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.BORSA_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.BORSA_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout R5 V2 pipeline branch
+        uses: actions/checkout@v4
+
+      - name: Download verified previous V6.1.1 source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10877575822/zip' \
+            -o /tmp/base-package.zip
+          mkdir -p /tmp/base-package release-src
+          unzip -q /tmp/base-package.zip -d /tmp/base-package
+          echo '2277477ccb02029ce96839d0bb4d34b1c30a4331fa093b4df8c1cba6900eca4f  /tmp/base-package/V6.1.1-VIOP-READINESS-SCAN-FIX-SOURCE.zip' | sha256sum -c -
+          unzip -q /tmp/base-package/V6.1.1-VIOP-READINESS-SCAN-FIX-SOURCE.zip -d release-src
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build
+
+      - name: Apply final14 runtime base
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-final14-runtime-fix.patch.xz.b64 > /tmp/final14.patch.xz
+          echo 'bd5db3f3773aa0f1cf8c5545c821e84be74f203f275d72b70846e6d117d19109  /tmp/final14.patch.xz' | sha256sum -c -
+          xz -dc /tmp/final14.patch.xz > /tmp/final14.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/final14.patch)
+          (cd release-src && patch -p1 < /tmp/final14.patch)
+
+      - name: Apply VIOP independent preflight fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-viop-independent-preflight.patch.xz.b64 > /tmp/viop-independent.patch.xz
+          echo 'c6e56dbbae531f27022fc10d35af8ac346fa68199290f1007a5eb3e60d5d5ec0  /tmp/viop-independent.patch.xz' | sha256sum -c -
+          xz -dc /tmp/viop-independent.patch.xz > /tmp/viop-independent.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/viop-independent.patch)
+          (cd release-src && patch -p1 < /tmp/viop-independent.patch)
+
+      - name: Apply realtime capability reconnect hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .ci/v611-realtime-capability-reconnect.patch.xz.b64 > /tmp/realtime-capability.patch.xz
+          echo 'f81f7f6570522f639ec083cc5be8698dd4db05dfab152a329d72beeab5851575  /tmp/realtime-capability.patch.xz' | sha256sum -c -
+          xz -dc /tmp/realtime-capability.patch.xz > /tmp/realtime-capability.patch
+          (cd release-src && patch --dry-run -p1 < /tmp/realtime-capability.patch)
+          (cd release-src && patch -p1 < /tmp/realtime-capability.patch)
+
+      - name: Overlay R5 V2 TradeWize backend source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-src/backend_v611/tests
+          cp backend_v611/tradewize_bars_adapter.mjs release-src/backend_v611/tradewize_bars_adapter.mjs
+          cp backend_v611/viop_sidecar_r5_bootstrap_v2.mjs release-src/backend_v611/viop_sidecar_r5_bootstrap_v2.mjs
+          cp backend_v611/tests/test_tradewize_bars_adapter.mjs release-src/backend_v611/tests/test_tradewize_bars_adapter.mjs
+          cp backend_v611/tests/test_viop_sidecar_r5_bootstrap.mjs release-src/backend_v611/tests/test_viop_sidecar_r5_bootstrap.mjs
+          grep -q '/api/v1/market-data/bars' release-src/backend_v611/viop_sidecar_r5_bootstrap_v2.mjs
+          grep -q 'countBack' release-src/backend_v611/tradewize_bars_adapter.mjs
+          grep -q 'includeOpenBar' release-src/backend_v611/tradewize_bars_adapter.mjs
+          grep -q 'liquidityReady' release-src/backend_v611/viop_sidecar_r5_bootstrap_v2.mjs
+          grep -q 'scannerReady' release-src/backend_v611/viop_sidecar_r5_bootstrap_v2.mjs
+          echo 'R5_V2_BACKEND_OVERLAY=PASS'
+
+      - name: Verify R5 V2 TradeWize bars adapter and runtime patch
+        working-directory: release-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          node backend_v611/tests/test_tradewize_bars_adapter.mjs
+          node backend_v611/tests/test_viop_sidecar_r5_bootstrap.mjs
+          node --check backend_v611/tradewize_bars_adapter.mjs
+          node --check backend_v611/viop_sidecar_r5_bootstrap_v2.mjs
+          node --check /tmp/viop_sidecar_r5.mjs
+          grep -q "6.1.1-sidecar-r5-bars" /tmp/viop_sidecar_r5.mjs
+          grep -q "LIQUIDITY_UNVERIFIED" /tmp/viop_sidecar_r5.mjs
+          grep -q "loadLiveQuote" /tmp/viop_sidecar_r5.mjs
+          grep -q "TRADEWIZE_BARS_1D_COUNTBACK" /tmp/viop_sidecar_r5.mjs
+          echo 'R5_V2_PATCHED_RUNTIME_SYNTAX=PASS'
+
+      - name: Run existing backend regressions
+        working-directory: release-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=.
+          python backend_v611/tests/test_provider_readiness.py
+          python backend_v611/tests/test_trade_wize_quota.py
+          python backend_v611/tests/test_trade_wize_response_policy.py
+          python backend_v611/tests/test_trade_wize_http_adapter.py
+          python backend_v611/tests/test_viop_contract_parser.py
+          python -m py_compile backend_v611/*.py
+
+      - name: Verify Android independent VIOP production path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('release-src/android/app/src/main/java/tr/borsatakip/v5')
+          pre=(root/'data/BackendPreflightClient.kt').read_text()
+          provider=(root/'data/BackendProvider.kt').read_text()
+          service=(root/'worker/RealtimeAlertService.kt').read_text()
+          socket=(root/'data/RealtimeScannerSocket.kt').read_text()
+          assert 'suspend fun checkAll(): Result = checkViopCore()' in pre
+          assert 'loadViopHistory(candidate.symbol)' in pre
+          assert '/v1/viop/history/$safe?range=$range&interval=$interval' in provider
+          assert service.count('if (!realtimeCapabilityEnabled())') >= 2
+          assert 'REALTIME_SCANNER_UNAVAILABLE_HTTP_$httpCode' in socket
+          print('ANDROID_VIOP_PREFLIGHT_HISTORY=PASS')
+          print('ANDROID_REALTIME_RECONNECT_HARDENING=PASS')
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run release unit tests
+        working-directory: release-src/android
+        shell: bash
+        env:
+          BORSA_EXTERNAL_SIGNING: '1'
+        run: gradle --no-daemon --stacktrace testReleaseUnitTest
+
+      - name: Build release and debug APKs
+        working-directory: release-src/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${RELEASE_KEYSTORE_B64:-}" ] && [ -n "${RELEASE_STORE_PASSWORD:-}" ] && [ -n "${RELEASE_KEY_ALIAS:-}" ] && [ -n "${RELEASE_KEY_PASSWORD:-}" ]; then
+            printf '%s' "$RELEASE_KEYSTORE_B64" | base64 -d > /tmp/v611-release.keystore
+            export BORSA_KEYSTORE_PATH=/tmp/v611-release.keystore
+            export BORSA_STORE_PASSWORD="$RELEASE_STORE_PASSWORD"
+            export BORSA_KEY_ALIAS="$RELEASE_KEY_ALIAS"
+            export BORSA_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+            unset BORSA_EXTERNAL_SIGNING
+            gradle --no-daemon --stacktrace assembleRelease
+            echo 'RELEASE_SIGNING=CI_SECRET' >> "$GITHUB_ENV"
+          else
+            export BORSA_EXTERNAL_SIGNING=1
+            gradle --no-daemon --stacktrace assembleRelease
+            echo 'RELEASE_SIGNING=UNAVAILABLE' >> "$GITHUB_ENV"
+          fi
+          gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Package and verify R5 V2 outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          RELEASE_APK="$(find release-src/android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          DEBUG_APK="$(find release-src/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -1)"
+          test -n "$RELEASE_APK" && test -n "$DEBUG_APK"
+          if "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RELEASE_APK" > out/release-signature.txt 2>&1; then
+            cp "$RELEASE_APK" out/V6.1.1-VIOP-BARS-R5-RELEASE.apk
+            echo 'RELEASE_SIGNATURE=PASS' >> out/VERIFICATION.txt
+          else
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$RELEASE_APK" out/V6.1.1-VIOP-BARS-R5-UNSIGNED-ALIGNED.apk
+            echo 'RELEASE_SIGNATURE=BLOCKED_NO_RELEASE_KEY' >> out/VERIFICATION.txt
+          fi
+          cp "$DEBUG_APK" out/V6.1.1-VIOP-BARS-R5-DEBUG.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-VIOP-BARS-R5-DEBUG.apk > out/debug-signature.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-VIOP-BARS-R5-DEBUG.apk > out/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" out/debug-badging.txt
+          rm -rf release-src/android/.gradle release-src/android/app/build release-src/android/build release-src/backend_v611/__pycache__ release-src/backend_v611/tests/__pycache__
+          (cd release-src && zip -qr "$GITHUB_WORKSPACE/out/V6.1.1-VIOP-BARS-R5-SOURCE.zip" android backend_v611 -x 'android/.gradle/*' 'android/**/build/*' 'backend_v611/**/__pycache__/*')
+          cp /tmp/viop_sidecar_r5.mjs out/V6.1.1-VIOP-SIDECAR-R5-GENERATED.mjs
+          printf 'TRADEWIZE_BARS_ENDPOINT_ADAPTER=PASS\nTRADEWIZE_BARS_1D_COUNTBACK_220=PASS\nTRADEWIZE_ISO_TIME_PARSE=PASS\nTRADEWIZE_CLOSED_BAR_SEMANTICS=PASS\nTRADEWIZE_VOLUME_NOT_FABRICATED=PASS\nR5_V2_RUNTIME_PATCH_INVARIANTS=PASS\nLIQUIDITY_READY_NOT_QUOTE_ALIAS=PASS\nSCANNER_READY_REQUIRES_HISTORY_FRESHNESS_LIQUIDITY=PASS\nANDROID_VIOP_PREFLIGHT_HISTORY=PASS\nANDROID_REALTIME_RECONNECT_HARDENING=PASS\nPACKAGE=tr.borsatakip.v5\nVERSION=6.1.1/611\nRELEASE_SIGNING=%s\nTRADEWIZE_PRODUCTION_CREDENTIAL=BLOCKED_NOT_PROVIDED\nTRADEWIZE_AUTHORITATIVE_CONTRACT_METADATA=BLOCKED_NOT_PROVIDED\nTRADEWIZE_PRODUCTION_E2E=NOT_RUN\nPHYSICAL_DEVICE=NOT_RUN\n' "$RELEASE_SIGNING" >> out/VERIFICATION.txt
+          sha256sum out/*.apk out/*.zip out/*.mjs > out/SHA256SUMS.txt
+
+      - name: Upload VIOP Bars R5 V2 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-VIOP-BARS-R5-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: out/*
