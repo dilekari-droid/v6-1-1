@@ -89,7 +89,7 @@ jobs:
           print('R3_ANDROID_EXACT_TREE=PASS')
           PY
           grep -Fq 'object BistUniverseCompletenessPolicy' release-src/android/app/src/main/java/tr/borsatakip/v5/data/BistUniverseCompletenessPolicy.kt
-          grep -Fq 'BistUniverseCompletenessPolicy.verify' release-src/android/app/src/main/java/tr/borsatakip/v5/data/MobileMarketDataProvider.kt
+          grep -Fq 'BistUniverseCompletenessPolicy.validate' release-src/android/app/src/main/java/tr/borsatakip/v5/data/MobileMarketDataProvider.kt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
