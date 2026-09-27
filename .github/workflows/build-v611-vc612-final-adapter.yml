@@ -1,0 +1,232 @@
+name: V6.1.1 Final Adapter VC612 APK
+
+on:
+  push:
+    branches: [ v611-vc612-final-adapter-apk ]
+    paths:
+      - '.github/workflows/build-v611-vc612-final-adapter.yml'
+      - 'source-transfer/final-adapter.part*.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-final-vc612:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      BORSA_EXTERNAL_SIGNING: '1'
+      BORSA_BACKEND_URL: 'https://borsa-takip-backend-live-production.up.railway.app'
+      BORSA_ATTESTATION_PUBLIC_KEYS: 'borsa-prod:v611-20260925:1:MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdDJwst8dTdL7v36TIKv+mbc2+br0pkbTdNiUHZMJpeOPUZAKNEGzua5m1Hs0c+KhhjCLt2ZrJ1k5TGtDfFE50g=='
+      SOURCE_TREE_SHA256: 'f4610cac1de378def27853bccc68c4ee3a77f3c1d3783329140429020822770d'
+      BASE_ARTIFACT_ID: '10927921773'
+      BASE_SOURCE_ZIP_SHA256: 'f11bfc99f67a917b9d00b33c70850066358ee876da61f78f4b018167b3f155a2'
+      FINAL_PATCH_XZ_SHA256: 'a588840f49902c24b0326bd67c63fbe78bd151d4b7c9910cbe530261232104e4'
+      FINAL_ANDROID_TREE_SHA256: 'a60ff5d2a799d3120dceaa8aa944a221c25f91b5a8dbd211c85c86a9b761c545'
+      EXPECTED_PRODUCTION_CERT_SHA256: 'a99a0d4d699a47cc5e6e0ad7acb72eff42369191603bd8ba2bb8c2e202328ffd'
+
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+
+      - name: Stamp immutable build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA:0:8}"
+          echo "GIT_COMMIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "BUILD_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          echo "V611_BUILD_ID=V6.1.1-R4-ADAPTER-vc612-${SHORT_SHA}" >> "$GITHUB_ENV"
+
+      - name: Download verified previous VC612 source artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${BASE_ARTIFACT_ID}/zip" \
+            -o /tmp/base-artifact.zip
+          mkdir -p /tmp/base-artifact release-src
+          unzip -q /tmp/base-artifact.zip -d /tmp/base-artifact
+          test -f /tmp/base-artifact/V6.1.1-VC612-CANONICAL-SOURCE.zip
+          echo "${BASE_SOURCE_ZIP_SHA256}  /tmp/base-artifact/V6.1.1-VC612-CANONICAL-SOURCE.zip" | sha256sum -c -
+          unzip -q /tmp/base-artifact/V6.1.1-VC612-CANONICAL-SOURCE.zip -d release-src
+          test -f release-src/android/app/build.gradle.kts
+          echo 'BASE_VC612_SOURCE=PASS'
+
+      - name: Reconstruct and verify final Android overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat source-transfer/final-adapter.part*.b64 | base64 -d > /tmp/final-android.patch.xz
+          echo "${FINAL_PATCH_XZ_SHA256}  /tmp/final-android.patch.xz" | sha256sum -c -
+          xz -t /tmp/final-android.patch.xz
+          xz -dc /tmp/final-android.patch.xz > /tmp/final-android.patch
+          patch --batch --forward -p2 -d release-src/android < /tmp/final-android.patch
+          rm -f \
+            release-src/android/app/src/main/java/tr/borsatakip/v5/data/BistUniverseCompletenessPolicy.kt \
+            release-src/android/app/src/main/java/tr/borsatakip/v5/data/CanonicalDirectionPolicy.kt \
+            release-src/android/app/src/test/java/tr/borsatakip/v5/data/BistUniverseCompletenessPolicyTest.kt \
+            release-src/android/app/src/test/java/tr/borsatakip/v5/data/CanonicalDirectionPolicyTest.kt
+          rm -rf release-src/android/.kotlin
+
+      - name: Verify exact final Android source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, os
+          root=Path('release-src/android')
+          items=[]
+          for p in sorted(x for x in root.rglob('*') if x.is_file()):
+              rel=p.relative_to(root).as_posix()
+              if rel.startswith('.gradle/') or '/build/' in f'/{rel}/':
+                  continue
+              items.append(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {rel}')
+          manifest='\n'.join(items)+'\n'
+          digest=hashlib.sha256(manifest.encode()).hexdigest()
+          print(f'FINAL_ANDROID_FILE_COUNT={len(items)}')
+          print(f'FINAL_ANDROID_TREE_SHA256={digest}')
+          if len(items) != 367:
+              raise SystemExit(f'Unexpected final Android file count: {len(items)}')
+          if digest != os.environ['FINAL_ANDROID_TREE_SHA256']:
+              raise SystemExit(f'Final Android tree mismatch: {digest}')
+          Path('FINAL-ANDROID-MANIFEST.txt').write_text(manifest)
+          print('ANDROID_SOURCE_EXACT=PASS')
+          PY
+          grep -Fq 'versionCode = 612' release-src/android/app/build.gradle.kts
+          grep -Fq 'versionName = "6.1.1"' release-src/android/app/build.gradle.kts
+          grep -Fq 'object CanonicalDirectionPolicy' release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/CanonicalDirectionPolicy.kt
+          grep -Fq 'VOLUME_UNAVAILABLE' release-src/android/app/src/main/java/tr/borsatakip/v5/data/BackendProvider.kt
+          grep -Fq 'freshnessEvidence' release-src/android/app/src/main/java/tr/borsatakip/v5/model/Models.kt
+          grep -Fq 'sessionEvidence' release-src/android/app/src/main/java/tr/borsatakip/v5/model/Models.kt
+          if grep -R -Fq 'localConfigState()' release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ViopContractsActivity.kt release-src/android/app/src/main/java/tr/borsatakip/v5/ui/ViopDetailActivity.kt; then
+            echo 'VIOP_GENERAL_READINESS_FORBIDDEN' >&2; exit 1
+          fi
+          test "$(grep -c 'ViopLiquidityInputPolicy.resolve(' release-src/android/app/src/main/java/tr/borsatakip/v5/analysis/ViopScanner.kt)" -eq 1
+          echo 'SOURCE_CHANGE_PASS=PASS'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Unit test lint and build exact VC612 source
+        working-directory: release-src/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace testReleaseUnitTest lintRelease assembleDebug assembleRelease
+
+      - name: Verify APK package signature and DEX changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out /tmp/debug-dex /tmp/release-dex
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          DEBUG_APK="$(find release-src/android/app/build/outputs/apk/debug -type f -name '*.apk' | head -1)"
+          RELEASE_APK="$(find release-src/android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          test -n "$DEBUG_APK" && test -f "$DEBUG_APK"
+          test -n "$RELEASE_APK" && test -f "$RELEASE_APK"
+          cp "$DEBUG_APK" out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$RELEASE_APK" out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk
+          "$BUILD_TOOLS/zipalign" -c -v 4 out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk > out/release-zipalign.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk > out/debug-badging.txt
+          "$BUILD_TOOLS/aapt" dump badging out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk > out/release-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='612' versionName='6.1.1'" out/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='612' versionName='6.1.1'" out/release-badging.txt
+          grep -q '^application-debuggable$' out/debug-badging.txt
+          if grep -q '^application-debuggable$' out/release-badging.txt; then echo 'release is debuggable' >&2; exit 1; fi
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk > out/debug-signature.txt
+          if "$BUILD_TOOLS/apksigner" verify out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk >/dev/null 2>&1; then
+            echo 'unsigned release candidate unexpectedly signed' >&2; exit 1
+          fi
+          unzip -q out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk 'classes*.dex' -d /tmp/debug-dex
+          unzip -q out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk 'classes*.dex' -d /tmp/release-dex
+          strings /tmp/debug-dex/classes*.dex > out/debug-dex-strings.txt
+          strings /tmp/release-dex/classes*.dex > out/release-dex-strings.txt
+          grep -Fq 'CanonicalDirectionPolicy' out/debug-dex-strings.txt
+          grep -Fq 'VOLUME_UNAVAILABLE' out/debug-dex-strings.txt
+          grep -Fq 'PROVIDER_TIMESTAMP_AGE' out/debug-dex-strings.txt
+          grep -Fq 'SESSION_UNVERIFIED' out/debug-dex-strings.txt
+          grep -Fq 'localViopConfigState' out/debug-dex-strings.txt
+          grep -Fq "${SOURCE_TREE_SHA256}" out/debug-dex-strings.txt
+          grep -Fq 'V6.1.1-R4-ADAPTER-vc612-' out/debug-dex-strings.txt
+          grep -Fq "${SOURCE_TREE_SHA256}" out/release-dex-strings.txt
+          grep -Fq 'VOLUME_UNAVAILABLE' out/release-dex-strings.txt
+          echo 'APK_CONTAINS_CHANGE=PASS'
+          cp FINAL-ANDROID-MANIFEST.txt out/FINAL-ANDROID-MANIFEST.txt
+          DEBUG_SHA=$(sha256sum out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk | awk '{print $1}')
+          RELEASE_SHA=$(sha256sum out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk | awk '{print $1}')
+          python - <<PY
+          import json, os
+          data={
+            'canonical_full_source_tree_sha256': os.environ['SOURCE_TREE_SHA256'],
+            'exact_android_tree_sha256': os.environ['FINAL_ANDROID_TREE_SHA256'],
+            'git_commit_sha': os.environ['GIT_COMMIT_SHA'],
+            'ci_run_id': os.environ['GITHUB_RUN_ID'],
+            'build_id': os.environ['V611_BUILD_ID'],
+            'build_utc': os.environ['BUILD_UTC'],
+            'version_name':'6.1.1',
+            'version_code':612,
+            'debug_apk_sha256':'${DEBUG_SHA}',
+            'unsigned_release_apk_sha256':'${RELEASE_SHA}',
+            'expected_production_signer_sha256': os.environ['EXPECTED_PRODUCTION_CERT_SHA256'],
+            'source_pass':'PASS',
+            'build_pass':'PASS',
+            'binary_pass':'PASS',
+            'device_pass':'NOT_RUN',
+            'production_signing_pass':'NOT_RUN_NO_PRIVATE_KEY',
+            'provider_e2e_pass':'NOT_VERIFIED'
+          }
+          open('out/BUILD-PROVENANCE.json','w').write(json.dumps(data,indent=2,sort_keys=True)+'\n')
+          PY
+          sha256sum out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk out/BUILD-PROVENANCE.json > out/SHA256SUMS.txt
+          cat > out/BUILD-VERIFICATION.txt <<EOF
+          SOURCE_PASS=PASS
+          BUILD_PASS=PASS
+          BINARY_PASS=PASS
+          DEVICE_PASS=NOT_RUN
+          PRODUCTION_SIGNING_PASS=NOT_RUN_NO_PRIVATE_KEY
+          PROVIDER_E2E_PASS=NOT_VERIFIED
+          PACKAGE=tr.borsatakip.v5
+          VERSION=6.1.1/612
+          BUILD_ID=${V611_BUILD_ID}
+          FULL_SOURCE_TREE_SHA256=${SOURCE_TREE_SHA256}
+          EXACT_ANDROID_TREE_SHA256=${FINAL_ANDROID_TREE_SHA256}
+          GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+          APK_CONTAINS_CHANGE=PASS
+          RELEASE_DEBUGGABLE=NO
+          RELEASE_SIGNING=UNSIGNED_EXTERNAL_SIGNING_REQUIRED
+          EOF
+
+      - name: Upload final VC612 APK package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-R4-ADAPTER-VC612-FINAL-APK
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            out/V6.1.1-R4-ADAPTER-VC612-DEBUG.apk
+            out/V6.1.1-R4-ADAPTER-VC612-RELEASE-UNSIGNED.apk
+            out/BUILD-PROVENANCE.json
+            out/BUILD-VERIFICATION.txt
+            out/SHA256SUMS.txt
+            out/debug-badging.txt
+            out/release-badging.txt
+            out/debug-signature.txt
+            out/release-zipalign.txt
+            out/FINAL-ANDROID-MANIFEST.txt
