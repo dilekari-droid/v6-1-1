@@ -4,14 +4,15 @@ on:
   push:
     branches: [ v611-complete-source ]
     paths:
+      - 'android/**'
       - 'backend_v611/**'
-      - '.ci/patch_viop_r3_source.py'
+      - '.env.example'
+      - 'SOURCE_STATUS.md'
       - '.github/workflows/build-v611-complete-source.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   build-complete-source:
@@ -31,58 +32,28 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Download verified Android source base
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Assemble self-contained source tree
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/v611-base
-          gh run download 36240927867 -R "${GITHUB_REPOSITORY}" -n V6.1.1-VIOP-INDEPENDENT-PREFLIGHT-PACKAGE -D /tmp/v611-base
-          BASE_SOURCE=$(find /tmp/v611-base -type f -name 'V6.1.1-VIOP-INDEPENDENT-PREFLIGHT-SOURCE.zip' -print -quit)
-          test -n "$BASE_SOURCE"
-          mkdir -p complete_source
-          unzip -q "$BASE_SOURCE" -d complete_source
-          test -x complete_source/android/gradlew
-          test -f complete_source/android/app/build.gradle.kts
-
-      - name: Overlay canonical backend source
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf complete_source/backend_v611
-          cp -a backend_v611 complete_source/backend_v611
+          test -x android/gradlew
+          test -f android/app/build.gradle.kts
+          test -f backend_v611/viop_r3_policy.mjs
+          test -f backend_v611/viop_sidecar_r3.mjs
+          test -f backend_v611/production_gateway_r3.mjs
+          rm -rf complete_source
           mkdir -p complete_source/ci
+          cp -a android complete_source/android
+          cp -a backend_v611 complete_source/backend_v611
+          cp .env.example complete_source/.env.example
+          cp SOURCE_STATUS.md complete_source/SOURCE_STATUS.md
           cp .github/workflows/sync-v611-complete-source.yml complete_source/ci/
+          cp .github/workflows/materialize-v611-complete-source.yml complete_source/ci/
           cp .github/workflows/build-v611-complete-source.yml complete_source/ci/
-          cat > complete_source/.env.example <<'EOF'
-          # Application/backend authentication key. Keep secret in deployment environment.
-          BORSA_API_KEY=
-          APP_API_KEY=
+          rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build
+          echo 'V611_SELF_CONTAINED_SOURCE=PASS'
 
-          # TradeWize production configuration. Do not put secrets in the APK.
-          TRADEWIZE_API_KEY=
-          TRADEWIZE_OAUTH_URL=
-          TRADEWIZE_UNIVERSE_URL=
-          TRADEWIZE_QUOTE_URL_TEMPLATE=
-          TRADEWIZE_HISTORY_URL_TEMPLATE=
-          TRADEWIZE_MIN_INTERVAL_MS=1000
-
-          # Gateway wiring.
-          VIOP_SIDECAR_URL=
-          LEGACY_BACKEND_URL=
-          EOF
-          cat > complete_source/SOURCE_STATUS.md <<'EOF'
-          # V6.1.1 Complete Source Status
-
-          Canonical source combines the verified V6.1.1 Android independent-preflight/reconnect source with the tested R3 VIOP backend, policy, production gateway and regression tests.
-
-          Included source is fail-closed for missing or invalid provider prerequisites. It does not invent provider endpoints, metadata, credentials, or history schemas.
-
-          External production dependencies still required for real TradeWize E2E: valid TRADEWIZE_API_KEY plus authoritative OAuth, universe/metadata, quote and history endpoint contracts. These values are deployment configuration and are intentionally not embedded in this source package or APK.
-          EOF
-
-      - name: Verify application identity
+      - name: Verify application identity and source safety
         shell: bash
         run: |
           set -euo pipefail
@@ -91,6 +62,26 @@ jobs:
           grep -q 'applicationId = "tr.borsatakip.v5"' "$F"
           grep -q 'versionCode = 611' "$F"
           grep -q 'versionName = "6.1.1"' "$F"
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('complete_source')
+          checks={
+              'actual_btk_token': re.compile(r'btk_[A-Za-z0-9_-]{20,}'),
+              'private_key_pem': re.compile(r'-----BEGIN (?:EC |RSA |OPENSSH )?PRIVATE KEY-----'),
+          }
+          for name,rx in checks.items():
+              hits=[]
+              for p in root.rglob('*'):
+                  if not p.is_file():
+                      continue
+                  try: text=p.read_text(errors='ignore')
+                  except Exception: continue
+                  if rx.search(text): hits.append(str(p))
+              if hits:
+                  raise SystemExit(f'{name}=FAIL files={len(hits)}')
+              print(f'{name}=PASS')
+          PY
           echo 'V611_APPLICATION_IDENTITY=PASS'
 
       - name: Backend regression suite
@@ -116,23 +107,43 @@ jobs:
           ./gradlew --no-daemon --stacktrace testReleaseUnitTest assembleDebug
           test -f app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Package canonical source
+      - name: Verify debug APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p output
+          APK=complete_source/android/app/build/outputs/apk/debug/app-debug.apk
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -x "$BUILD_TOOLS/apksigner"
+          test -x "$BUILD_TOOLS/aapt"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" > output/debug-signature.txt
+          "$BUILD_TOOLS/aapt" dump badging "$APK" > output/debug-badging.txt
+          grep -q "package: name='tr.borsatakip.v5' versionCode='611' versionName='6.1.1'" output/debug-badging.txt
+          grep -q "sdkVersion:'26'" output/debug-badging.txt
+          grep -q "targetSdkVersion:'35'" output/debug-badging.txt
+          echo 'V611_DEBUG_APK_SIGNATURE=PASS'
+          echo 'V611_DEBUG_APK_IDENTITY=PASS'
+
+      - name: Package canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
           cp complete_source/android/app/build/outputs/apk/debug/app-debug.apk output/V6.1.1-COMPLETE-SOURCE-DEBUG.apk
-          rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build
+          rm -rf complete_source/android/.gradle complete_source/android/.kotlin complete_source/android/app/build complete_source/android/build complete_source/backend_v611/__pycache__ complete_source/backend_v611/tests/__pycache__
           (cd complete_source && zip -qr ../output/V6.1.1-COMPLETE-SOURCE.zip .)
           cat > output/V6.1.1-COMPLETE-SOURCE-REPORT.md <<EOF
           # V6.1.1 Complete Source Build
 
           - Branch: ${GITHUB_REF_NAME}
           - Commit: ${GITHUB_SHA}
-          - Android verified base run: 36240927867
+          - Self-contained Android + backend source: PASS
           - Package: tr.borsatakip.v5
           - versionName: 6.1.1
           - versionCode: 611
+          - minSdk: 26
+          - targetSdk: 35
+          - Hardcoded btk token scan: PASS
+          - Private-key PEM scan: PASS
           - Backend readiness regressions: PASS
           - TradeWize quota regressions: PASS
           - VIOP contract parser regressions: PASS
@@ -140,6 +151,7 @@ jobs:
           - R3 production gateway runtime: PASS
           - Android testReleaseUnitTest: PASS
           - Android assembleDebug: PASS
+          - Debug APK identity/signature verification: PASS
           - Real TradeWize production E2E: NOT_RUN / BLOCKED by external credential + authoritative endpoint contract
           - Production release signing: NOT_RUN / external release key required
           EOF
@@ -149,5 +161,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: V6.1.1-COMPLETE-SOURCE-PACKAGE
+          if-no-files-found: error
           path: output/*
           retention-days: 30
