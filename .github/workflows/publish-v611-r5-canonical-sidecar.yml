@@ -1,0 +1,69 @@
+name: Publish V6.1.1 R5 Canonical Sidecar
+
+on:
+  push:
+    branches: [ v611-viop-bars-r5 ]
+    paths:
+      - '.github/workflows/publish-v611-r5-canonical-sidecar.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-canonical-sidecar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout R5 branch
+        uses: actions/checkout@v4
+        with:
+          ref: v611-viop-bars-r5
+
+      - name: Generate R5 runtime from pinned inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node backend_v611/tests/test_viop_sidecar_r5_bootstrap.mjs
+          node --check /tmp/viop_sidecar_r5.mjs
+          grep -q 'V611_VIOP_SIDECAR_R5_LISTENING' /tmp/viop_sidecar_r5.mjs
+          grep -q 'TRADEWIZE_BARS_1D_COUNTBACK' /tmp/viop_sidecar_r5.mjs
+          grep -q 'LIQUIDITY_UNVERIFIED' /tmp/viop_sidecar_r5.mjs
+          grep -q 'scannerReady' /tmp/viop_sidecar_r5.mjs
+
+      - name: Normalize canonical diagnostic version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/viop_sidecar_r5.mjs')
+          s=p.read_text()
+          old="if(u.pathname==='/health'||u.pathname==='/v1/health') return json({ok:true,service:'v611-viop-sidecar',version:'6.1.1-sidecar-r4'});"
+          new="if(u.pathname==='/health'||u.pathname==='/v1/health') return json({ok:true,service:'v611-viop-sidecar',version:'6.1.1-sidecar-r5-bars'});"
+          if s.count(old) != 1:
+              raise SystemExit(f'HEALTH_VERSION_INVARIANT occurrences={s.count(old)}')
+          p.write_text(s.replace(old,new))
+          PY
+          node --check /tmp/viop_sidecar_r5.mjs
+          ! grep -q "version:'6.1.1-sidecar-r4'" /tmp/viop_sidecar_r5.mjs
+          grep -q "version:'6.1.1-sidecar-r5-bars'" /tmp/viop_sidecar_r5.mjs
+
+      - name: Publish canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/viop_sidecar_r5.mjs backend_v611/viop_sidecar_r5_generated.mjs
+          sha256sum backend_v611/viop_sidecar_r5_generated.mjs | tee backend_v611/viop_sidecar_r5_generated.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend_v611/viop_sidecar_r5_generated.mjs backend_v611/viop_sidecar_r5_generated.sha256
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'CANONICAL_SOURCE_ALREADY_CURRENT=PASS'
+          else
+            git commit -m 'build: publish deterministic V6.1.1 R5 sidecar'
+            git push origin HEAD:v611-viop-bars-r5
+          fi
+          echo "CANONICAL_COMMIT=$(git rev-parse HEAD)"
+          echo 'CANONICAL_R5_SIDECAR_PUBLISH=PASS'
