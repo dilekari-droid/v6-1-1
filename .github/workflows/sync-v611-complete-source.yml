@@ -1,0 +1,45 @@
+name: Sync V6.1.1 Complete Source
+
+on:
+  push:
+    branches: [ v611-complete-source ]
+    paths:
+      - '.github/workflows/sync-v611-complete-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Import tested R3 backend tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin v611-viop-r2-source-fix
+          git checkout origin/v611-viop-r2-source-fix -- backend_v611 .ci/patch_viop_r3_source.py
+          rm -f backend_v611/viop_sidecar_r4.mjs backend_v611/viop_sidecar_bootstrap_r3.mjs
+          node --check backend_v611/viop_r3_policy.mjs
+          node --check backend_v611/viop_sidecar_r3.mjs
+          node --check backend_v611/production_gateway_r3.mjs
+          python -m unittest discover -s backend_v611/tests -p 'test_*.py'
+          node backend_v611/tests/test_viop_r3_policy_fixed.mjs
+          node backend_v611/tests/test_production_gateway_r3.mjs
+      - name: Commit canonical source sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'SOURCE_ALREADY_SYNCED=PASS'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend_v611 .ci/patch_viop_r3_source.py
+          git commit -m 'source: unify tested VIOP R3 backend with latest Android branch'
+          git push origin HEAD:v611-complete-source
