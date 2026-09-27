@@ -1,0 +1,108 @@
+name: Package V6.1.1 R5 Canonical Provenance
+
+on:
+  push:
+    branches: [ v611-viop-bars-r5 ]
+    paths:
+      - '.github/workflows/package-v611-r5-canonical-provenance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout canonical R5 branch
+        uses: actions/checkout@v4
+
+      - name: Download verified R5 APK build artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/dilekari-droid/v6-1-1/actions/artifacts/10929157004/zip' \
+            -o /tmp/r5-build.zip
+          mkdir -p /tmp/r5 out
+          unzip -q /tmp/r5-build.zip -d /tmp/r5
+          echo '5bf41adf3d2ecbb434e5b30f4d51aebee3210ca6ca8be1de976a6d7bdc36511e  /tmp/r5/V6.1.1-VIOP-BARS-R5-DEBUG.apk' | sha256sum -c -
+          echo 'd10dd8928cee4fa936a5782eeba1d5c3d672fc08b25cb52a1d8cef2df09d0243  /tmp/r5/V6.1.1-VIOP-BARS-R5-UNSIGNED-ALIGNED.apk' | sha256sum -c -
+          echo '7a6389b398c4922184923754f33b50959594730eef174a487d6210f28d3d6c7f  /tmp/r5/V6.1.1-VIOP-BARS-R5-SOURCE.zip' | sha256sum -c -
+          echo 'R5_BUILD_ARTIFACT_CONTENT=PASS'
+
+      - name: Verify production canonical R5 sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f backend_v611/viop_sidecar_r5_generated.mjs
+          test -f backend_v611/viop_sidecar_r5_generated.sha256
+          echo '1df9e33e3164230f8443b0f0bd0cab9ab5159689fb53c26d1f1ee16b2594678a  backend_v611/viop_sidecar_r5_generated.mjs' | sha256sum -c -
+          node --check backend_v611/viop_sidecar_r5_generated.mjs
+          grep -q '/api/v1/market-data/bars' backend_v611/viop_sidecar_r5_generated.mjs
+          grep -q 'TRADEWIZE_BARS_1D_COUNTBACK' backend_v611/viop_sidecar_r5_generated.mjs
+          grep -q 'LIQUIDITY_UNVERIFIED' backend_v611/viop_sidecar_r5_generated.mjs
+          grep -q 'scannerReady' backend_v611/viop_sidecar_r5_generated.mjs
+          echo 'CANONICAL_R5_SIDECAR=PASS'
+
+      - name: Assemble immutable provenance package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/r5/V6.1.1-VIOP-BARS-R5-DEBUG.apk out/
+          cp /tmp/r5/V6.1.1-VIOP-BARS-R5-UNSIGNED-ALIGNED.apk out/
+          cp /tmp/r5/V6.1.1-VIOP-BARS-R5-SOURCE.zip out/
+          cp /tmp/r5/VERIFICATION.txt out/BUILD-VERIFICATION.txt
+          cp /tmp/r5/debug-badging.txt out/
+          cp /tmp/r5/debug-signature.txt out/
+          cp backend_v611/viop_sidecar_r5_generated.mjs out/V6.1.1-VIOP-SIDECAR-R5-CANONICAL.mjs
+          cat > out/PROVENANCE.txt <<EOF
+          PRODUCT=V6.1.1
+          PACKAGE=tr.borsatakip.v5
+          VERSION_CODE=611
+          VERSION_NAME=6.1.1
+          APK_BUILD_WORKFLOW_RUN=36311254728
+          APK_BUILD_GIT_COMMIT=99f63e4ae20dab14d0719901388446dad8d32a94
+          APK_BUILD_ARTIFACT_ID=10929157004
+          APK_BUILD_ARTIFACT_DIGEST=sha256:9b8708dae70b77837909e665259c1e432a8e1e8c240d39ce759273f39a5104df
+          DEBUG_APK_SHA256=5bf41adf3d2ecbb434e5b30f4d51aebee3210ca6ca8be1de976a6d7bdc36511e
+          SOURCE_ZIP_SHA256=7a6389b398c4922184923754f33b50959594730eef174a487d6210f28d3d6c7f
+          SOURCE_BASE_ARTIFACT_ID=10877575822
+          SOURCE_BASE_ZIP_SHA256=2277477ccb02029ce96839d0bb4d34b1c30a4331fa093b4df8c1cba6900eca4f
+          PRODUCTION_R5_SIDECAR_GIT_COMMIT=e91c858aeb30b05e0c321686d637edf3f8bcd10c
+          PRODUCTION_R5_SIDECAR_SHA256=1df9e33e3164230f8443b0f0bd0cab9ab5159689fb53c26d1f1ee16b2594678a
+          PRODUCTION_R5_ADAPTER_GIT_REF=f4f0aafc4df676362a71c8244eb76b329c0ff710
+          PRODUCTION_R5_ADAPTER_GIT_BLOB_SHA1=232e912141b906d6908b39a214516b1d332e4e2a
+          RAILWAY_R5_DEPLOYMENT=6d982510-9c5f-454d-913a-deebb09b4ffa
+          TRADEWIZE_HISTORY_ENDPOINT_MODE=TRADEWIZE_BARS_1D_COUNTBACK
+          TRADEWIZE_PRODUCTION_CREDENTIAL=BLOCKED_NOT_PROVIDED
+          TRADEWIZE_PRODUCTION_E2E=NOT_RUN
+          RELEASE_SIGNATURE=BLOCKED_NO_RELEASE_KEY
+          EOF
+          sed -i 's/^          //' out/PROVENANCE.txt
+          sha256sum out/*.apk out/*.zip out/*.mjs out/PROVENANCE.txt > out/SHA256SUMS-CANONICAL.txt
+
+      - name: Verify provenance invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '^DEBUG_APK_SHA256=5bf41adf' out/PROVENANCE.txt
+          grep -q '^PRODUCTION_R5_SIDECAR_GIT_COMMIT=e91c858a' out/PROVENANCE.txt
+          grep -q '^PRODUCTION_R5_SIDECAR_SHA256=1df9e33e' out/PROVENANCE.txt
+          grep -q '^TRADEWIZE_PRODUCTION_CREDENTIAL=BLOCKED_NOT_PROVIDED$' out/PROVENANCE.txt
+          echo 'CANONICAL_PROVENANCE=PASS'
+
+      - name: Upload canonical R5 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: V6.1.1-VIOP-BARS-R5-CANONICAL-PACKAGE
+          if-no-files-found: error
+          retention-days: 30
+          path: out/*
